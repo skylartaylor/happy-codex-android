@@ -3,6 +3,10 @@ mod client;
 mod managed_install;
 mod remote_control_client;
 mod settings;
+#[cfg(not(target_os = "android"))]
+mod update_loop;
+#[cfg(target_os = "android")]
+#[path = "update_loop_android.rs"]
 mod update_loop;
 
 use std::path::Path;
@@ -614,6 +618,7 @@ impl Daemon {
         if updater.is_starting_or_running().await? {
             updater.stop().await?;
         }
+        #[cfg(not(target_os = "android"))]
         updater.start().await?;
 
         let info = self.wait_until_ready().await?;
@@ -621,7 +626,7 @@ impl Daemon {
         Ok(BootstrapOutput {
             status: BootstrapStatus::Bootstrapped,
             backend: BackendKind::Pid,
-            auto_update_enabled: true,
+            auto_update_enabled: cfg!(not(target_os = "android")),
             remote_control_enabled: settings.remote_control_enabled,
             managed_codex_path: self.managed_codex_bin.clone(),
             managed_codex_version,
@@ -665,10 +670,30 @@ impl Daemon {
     }
 
     async fn is_bootstrapped(&self, settings: &DaemonSettings) -> Result<bool> {
-        let updater = backend::pid_update_loop_backend(self.backend_paths(settings));
-        updater.is_starting_or_running().await
+        #[cfg(target_os = "android")]
+        {
+            return Ok(self.running_backend_instance(settings).await?.is_some());
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let updater = backend::pid_update_loop_backend(self.backend_paths(settings));
+            updater.is_starting_or_running().await
+        }
     }
 
+    #[cfg(target_os = "android")]
+    fn ensure_managed_codex_bin(&self) -> Result<()> {
+        if self.managed_codex_bin.is_file() {
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Happy-managed Codex executable not found at {}",
+            self.managed_codex_bin.display()
+        ))
+    }
+
+    #[cfg(not(target_os = "android"))]
     fn ensure_managed_codex_bin(&self) -> Result<()> {
         if self.managed_codex_bin.is_file() {
             return Ok(());

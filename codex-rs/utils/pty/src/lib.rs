@@ -1,3 +1,5 @@
+#[cfg(target_os = "android")]
+mod android_openpty;
 pub mod pipe;
 mod process;
 pub mod process_group;

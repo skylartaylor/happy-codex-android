@@ -17,6 +17,7 @@ use crate::oauth::StoredOAuthTokenStatus;
 use crate::oauth::oauth_token_status;
 use crate::oauth_http_client::OAuthHttpClientAdapter;
 use crate::utils::apply_default_headers;
+use crate::utils::apply_platform_tls;
 use crate::utils::build_default_headers;
 use codex_config::types::AuthKeyringBackendKind;
 use codex_config::types::OAuthCredentialsStoreMode;
@@ -210,7 +211,9 @@ async fn discover_streamable_http_oauth_with_headers(
 ) -> Result<Option<StreamableHttpOAuthDiscovery>> {
     // Use no_proxy to avoid a bug in the system-configuration crate that
     // can result in a panic. See #8912.
-    let builder = Client::builder().timeout(DISCOVERY_TIMEOUT).no_proxy();
+    let builder = apply_platform_tls(Client::builder())?
+        .timeout(DISCOVERY_TIMEOUT)
+        .no_proxy();
     let client = apply_default_headers(builder, default_headers).build()?;
     let mut authorization_manager = AuthorizationManager::new(url).await?;
     authorization_manager.with_client(client)?;

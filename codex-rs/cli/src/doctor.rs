@@ -74,6 +74,10 @@ mod runtime;
 mod system;
 mod thread_inventory;
 mod title;
+#[cfg(not(target_os = "android"))]
+mod updates;
+#[cfg(target_os = "android")]
+#[path = "doctor/updates_android.rs"]
 mod updates;
 
 use background::background_server_check;

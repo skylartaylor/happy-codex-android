@@ -66,6 +66,9 @@ urlencoding = { workspace = true }
 webbrowser = { workspace = true }
 which = { workspace = true }
 
+[target.'cfg(target_os = "android")'.dependencies]
+webpki-root-certs = "1"
+
 [dev-dependencies]
 codex-utils-cargo-bin = { workspace = true }
 pretty_assertions = { workspace = true }

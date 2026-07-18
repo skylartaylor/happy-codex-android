@@ -1,3 +1,5 @@
+#[cfg(target_os = "android")]
+use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use codex_config::types::McpServerEnvVar;
@@ -14,14 +16,49 @@ pub(crate) fn create_env_for_mcp_server(
     env_vars: &[McpServerEnvVar],
 ) -> Result<HashMap<OsString, OsString>> {
     let additional_env_vars = local_stdio_env_var_names(env_vars)?;
-    let env = DEFAULT_ENV_VARS
+    let mut child_env = DEFAULT_ENV_VARS
         .iter()
         .copied()
+        .chain(ANDROID_ENV_VARS.iter().copied())
         .chain(additional_env_vars)
         .filter_map(|var| env::var_os(var).map(|value| (OsString::from(var), value)))
         .chain(extra_env.unwrap_or_default())
         .collect();
-    Ok(env)
+    append_trusted_android_preload(&mut child_env);
+    Ok(child_env)
+}
+
+#[cfg(target_os = "android")]
+fn append_trusted_android_preload(child_env: &mut HashMap<OsString, OsString>) {
+    child_env.remove(std::ffi::OsStr::new("LD_PRELOAD"));
+    if let Some(value) = trusted_android_preload(
+        env::var_os("LD_PRELOAD"),
+        env::var_os("HAPPY_CODEX_TERMUX_PRELOAD"),
+        env::var_os("PREFIX"),
+    ) {
+        child_env.insert(OsString::from("LD_PRELOAD"), value);
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn append_trusted_android_preload(_child_env: &mut HashMap<OsString, OsString>) {}
+
+#[cfg(any(target_os = "android", test))]
+fn trusted_android_preload(
+    actual: Option<OsString>,
+    expected: Option<OsString>,
+    prefix: Option<OsString>,
+) -> Option<OsString> {
+    match (actual, expected, prefix) {
+        (Some(actual), Some(expected), Some(prefix))
+            if actual == expected
+                && std::path::Path::new(&actual)
+                    == std::path::Path::new(&prefix).join("lib/libtermux-exec.so") =>
+        {
+            Some(actual)
+        }
+        _ => None,
+    }
 }
 
 pub(crate) fn create_env_overlay_for_remote_mcp_server(
@@ -126,6 +163,29 @@ pub(crate) fn apply_default_headers(
     }
 }
 
+/// Android command-line processes do not have the Java context expected by
+/// rustls-platform-verifier. Explicit roots keep remote MCP TLS independent of
+/// Android framework initialization.
+#[cfg(target_os = "android")]
+pub(crate) fn apply_platform_tls(builder: ClientBuilder) -> Result<ClientBuilder> {
+    Ok(builder.tls_certs_only(webpki_root_certificates()?))
+}
+
+#[cfg(not(target_os = "android"))]
+pub(crate) fn apply_platform_tls(builder: ClientBuilder) -> Result<ClientBuilder> {
+    Ok(builder)
+}
+
+#[cfg(target_os = "android")]
+fn webpki_root_certificates() -> Result<Vec<reqwest::Certificate>> {
+    webpki_root_certs::TLS_SERVER_ROOT_CERTS
+        .iter()
+        .map(|der| {
+            reqwest::Certificate::from_der(der.as_ref()).context("invalid embedded TLS root")
+        })
+        .collect()
+}
+
 #[cfg(unix)]
 pub(crate) const DEFAULT_ENV_VARS: &[&str] = &[
     "HOME",
@@ -140,6 +200,23 @@ pub(crate) const DEFAULT_ENV_VARS: &[&str] = &[
     "TMPDIR",
     "TZ",
 ];
+
+/// Termux helpers need these values in addition to the normal Unix allowlist.
+/// PREFIX locates the Termux tree. LD_PRELOAD is handled separately and only
+/// forwarded when it matches the value pinned by the Happy helper.
+#[cfg(target_os = "android")]
+pub(crate) const ANDROID_ENV_VARS: &[&str] = &[
+    "PREFIX",
+    "TERMUX_VERSION",
+    "NPM_CONFIG_PREFIX",
+    "XDG_RUNTIME_DIR",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+];
+
+#[cfg(not(target_os = "android"))]
+pub(crate) const ANDROID_ENV_VARS: &[&str] = &[];
 
 #[cfg(windows)]
 pub(crate) const DEFAULT_ENV_VARS: &[&str] =
@@ -195,6 +272,40 @@ mod tests {
         )
         .expect("local MCP env should build");
         assert_eq!(env.get(OsStr::new("TZ")), Some(&expected));
+    }
+
+    #[test]
+    fn trusted_android_preload_requires_an_exact_helper_pin() {
+        let prefix = OsString::from("/data/data/com.termux/files/usr");
+        let preload = OsString::from("/data/data/com.termux/files/usr/lib/libtermux-exec.so");
+
+        assert_eq!(
+            trusted_android_preload(
+                Some(preload.clone()),
+                Some(preload.clone()),
+                Some(prefix.clone()),
+            ),
+            Some(preload.clone())
+        );
+        assert_eq!(
+            trusted_android_preload(
+                Some(preload.clone()),
+                Some(OsString::from("/tmp/other.so")),
+                Some(prefix),
+            ),
+            None
+        );
+        assert_eq!(
+            trusted_android_preload(
+                Some(preload),
+                Some(OsString::from(
+                    "/data/data/com.termux/files/usr/lib/libtermux-exec.so",
+                )),
+                Some(OsString::from("/different/prefix")),
+            ),
+            None
+        );
+        assert_eq!(trusted_android_preload(None, None, None), None);
     }
 
     #[test]

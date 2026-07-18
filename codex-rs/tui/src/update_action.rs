@@ -1,8 +1,8 @@
-#[cfg(any(not(debug_assertions), test))]
+#[cfg(all(not(target_os = "android"), any(not(debug_assertions), test)))]
 use codex_install_context::InstallContext;
-#[cfg(any(not(debug_assertions), test))]
+#[cfg(all(not(target_os = "android"), any(not(debug_assertions), test)))]
 use codex_install_context::InstallMethod;
-#[cfg(any(not(debug_assertions), test))]
+#[cfg(all(not(target_os = "android"), any(not(debug_assertions), test)))]
 use codex_install_context::StandalonePlatform;
 
 /// Update action the CLI should perform after the TUI exits.
@@ -23,6 +23,7 @@ pub enum UpdateAction {
 }
 
 impl UpdateAction {
+    #[cfg(not(target_os = "android"))]
     #[cfg(any(not(debug_assertions), test))]
     pub(crate) fn from_install_context(context: &InstallContext) -> Option<Self> {
         match &context.method {
@@ -39,6 +40,7 @@ impl UpdateAction {
     }
 
     /// Returns the list of command-line arguments for invoking the update.
+    #[cfg(not(target_os = "android"))]
     pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
         match self {
             UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@openai/codex"]),
@@ -64,6 +66,12 @@ impl UpdateAction {
         }
     }
 
+    #[cfg(target_os = "android")]
+    pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
+        let _ = self;
+        ("happy", &["managed-codex-update"])
+    }
+
     /// Returns string representation of the command-line arguments for invoking the update.
     pub fn command_str(self) -> String {
         let (command, args) = self.command_args();
@@ -72,12 +80,17 @@ impl UpdateAction {
     }
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(all(not(debug_assertions), not(target_os = "android")))]
 pub fn get_update_action() -> Option<UpdateAction> {
     UpdateAction::from_install_context(InstallContext::current())
 }
 
-#[cfg(test)]
+#[cfg(all(not(debug_assertions), target_os = "android"))]
+pub fn get_update_action() -> Option<UpdateAction> {
+    None
+}
+
+#[cfg(all(test, not(target_os = "android")))]
 mod tests {
     use super::*;
     use codex_utils_absolute_path::AbsolutePathBuf;

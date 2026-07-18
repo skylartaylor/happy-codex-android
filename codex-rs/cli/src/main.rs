@@ -754,6 +754,12 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
 }
 
 /// Run the update action and print the result.
+#[cfg(target_os = "android")]
+fn run_update_action(_action: UpdateAction) -> anyhow::Result<()> {
+    anyhow::bail!("Codex updates are managed by Happy on Android")
+}
+
+#[cfg(not(target_os = "android"))]
 fn run_update_action(action: UpdateAction) -> anyhow::Result<()> {
     println!();
     let cmd_str = action.command_str();
@@ -796,6 +802,12 @@ fn run_update_action(action: UpdateAction) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "android")]
+fn run_update_command() -> anyhow::Result<()> {
+    anyhow::bail!("Codex updates are managed by Happy on Android")
+}
+
+#[cfg(not(target_os = "android"))]
 fn run_update_command() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     {

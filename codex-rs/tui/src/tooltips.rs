@@ -3,6 +3,7 @@ use codex_protocol::account::PlanType;
 use lazy_static::lazy_static;
 use rand::Rng;
 
+#[cfg(not(target_os = "android"))]
 const ANNOUNCEMENT_TIP_URL: &str =
     "https://raw.githubusercontent.com/openai/codex/main/announcement_tip.toml";
 
@@ -52,8 +53,11 @@ fn experimental_tooltips() -> Vec<&'static str> {
 pub(crate) fn get_tooltip(plan: Option<PlanType>, fast_mode_enabled: bool) -> Option<String> {
     let mut rng = rand::rng();
 
-    if let Some(announcement) = announcement::fetch_announcement_tip(plan) {
-        return Some(announcement);
+    #[cfg(not(target_os = "android"))]
+    {
+        if let Some(announcement) = announcement::fetch_announcement_tip(plan) {
+            return Some(announcement);
+        }
     }
 
     // Leave small chance for a random tooltip to be shown.
@@ -120,6 +124,7 @@ fn pick_tooltip<R: Rng + ?Sized>(rng: &mut R) -> Option<&'static str> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 pub(crate) mod announcement {
     use crate::tooltips::ANNOUNCEMENT_TIP_URL;
     use crate::version::CODEX_CLI_VERSION;
@@ -322,7 +327,7 @@ pub(crate) mod announcement {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "android")))]
 mod tests {
     use super::*;
     use crate::tooltips::announcement::parse_announcement_tip_toml;

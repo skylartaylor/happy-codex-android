@@ -191,6 +191,10 @@ pub use update_action::get_update_action;
 mod update_prompt;
 #[cfg(any(not(debug_assertions), test))]
 mod update_versions;
+#[cfg(not(target_os = "android"))]
+mod updates;
+#[cfg(target_os = "android")]
+#[path = "updates_android.rs"]
 mod updates;
 #[cfg(any(not(debug_assertions), test))]
 mod updates_cache;
@@ -1285,6 +1289,7 @@ async fn run_ratatui_app(
     let uses_remote_workspace = app_server_target.uses_remote_workspace();
     color_eyre::install()?;
 
+    #[cfg(not(target_os = "android"))]
     tooltips::announcement::prewarm();
 
     // Forward panic reports through tracing so they appear in the UI status

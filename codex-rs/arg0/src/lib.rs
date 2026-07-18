@@ -17,6 +17,8 @@ use tempfile::TempDir;
 
 const APPLY_PATCH_ARG0: &str = "apply_patch";
 const MISSPELLED_APPLY_PATCH_ARG0: &str = "applypatch";
+#[cfg(target_os = "android")]
+const CODEX_SELF_EXE_ENV: &str = "CODEX_SELF_EXE";
 #[cfg(unix)]
 const EXECVE_WRAPPER_ARG0: &str = "codex-execve-wrapper";
 const LOCK_FILENAME: &str = ".lock";
@@ -245,8 +247,13 @@ where
     F: FnOnce(Arg0DispatchPaths) -> Fut,
     Fut: Future<Output = anyhow::Result<()>>,
 {
+    #[cfg(target_os = "android")]
+    let codex_self_exe = resolve_codex_self_exe();
+    #[cfg(not(target_os = "android"))]
+    let codex_self_exe = current_exe.clone();
+
     let paths = Arg0DispatchPaths {
-        codex_self_exe: current_exe.clone(),
+        codex_self_exe,
         codex_linux_sandbox_exe: if cfg!(target_os = "linux") {
             linux_sandbox_exe_path(path_entry_guard.as_ref(), current_exe)
         } else {
@@ -262,6 +269,49 @@ where
     // runtime paths above can point at aliases inside that directory.
     drop(path_entry_guard);
     result
+}
+
+#[cfg(any(target_os = "android", test))]
+fn resolve_codex_self_exe_with(
+    override_path: Option<OsString>,
+    current_exe: Option<PathBuf>,
+) -> Option<PathBuf> {
+    match override_path {
+        Some(value) if !value.is_empty() => canonical_self_exe_override(value),
+        Some(_) | None => current_exe,
+    }
+}
+
+#[cfg(any(target_os = "android", test))]
+fn canonical_self_exe_override(value: OsString) -> Option<PathBuf> {
+    let path = PathBuf::from(value);
+    if !path.is_absolute() {
+        return None;
+    }
+
+    let canonical = std::fs::canonicalize(path).ok()?;
+    let metadata = std::fs::metadata(&canonical).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o111 == 0 {
+            return None;
+        }
+    }
+    Some(canonical)
+}
+
+fn resolve_codex_self_exe() -> Option<PathBuf> {
+    let current_exe = std::env::current_exe().ok();
+    #[cfg(target_os = "android")]
+    {
+        return resolve_codex_self_exe_with(std::env::var_os(CODEX_SELF_EXE_ENV), current_exe);
+    }
+    #[cfg(not(target_os = "android"))]
+    current_exe
 }
 
 fn linux_sandbox_exe_path(
@@ -381,7 +431,12 @@ fn prepare_path_entry_for_codex_aliases(
         #[cfg(unix)]
         EXECVE_WRAPPER_ARG0,
     ] {
-        let exe = std::env::current_exe()?;
+        let exe = resolve_codex_self_exe().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "failed to determine codex self executable",
+            )
+        })?;
 
         #[cfg(unix)]
         {
@@ -407,7 +462,7 @@ fn prepare_path_entry_for_codex_aliases(
     let updated_path_env_var = path_env_with_entry(path, existing_path);
 
     let paths = Arg0DispatchPaths {
-        codex_self_exe: std::env::current_exe().ok(),
+        codex_self_exe: resolve_codex_self_exe(),
         codex_linux_sandbox_exe: {
             #[cfg(target_os = "linux")]
             {
@@ -518,6 +573,7 @@ mod tests {
     use super::LOCK_FILENAME;
     use super::janitor_cleanup;
     use super::linux_sandbox_exe_path;
+    use super::resolve_codex_self_exe_with;
     #[cfg(unix)]
     use super::run_main_with_arg0_guard;
     #[cfg(unix)]
@@ -741,5 +797,56 @@ mod tests {
 
         assert!(!dir.exists());
         Ok(())
+    }
+
+    #[test]
+    fn resolve_codex_self_exe_prefers_environment_override() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let override_path = temp_dir.path().join("codex.bin");
+        fs::write(&override_path, [])?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&override_path, fs::Permissions::from_mode(0o700))?;
+        }
+        let canonical_override = fs::canonicalize(&override_path)?;
+        let resolved = resolve_codex_self_exe_with(
+            Some(override_path.into_os_string()),
+            Some(PathBuf::from("/tmp/wrapper")),
+        );
+
+        assert_eq!(resolved, Some(canonical_override));
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_codex_self_exe_falls_back_to_current_exe() {
+        let current_exe = PathBuf::from("/tmp/current-exe");
+
+        assert_eq!(
+            resolve_codex_self_exe_with(None, Some(current_exe.clone())),
+            Some(current_exe),
+        );
+    }
+
+    #[test]
+    fn resolve_codex_self_exe_ignores_empty_override() {
+        let current_exe = PathBuf::from("/tmp/current-exe");
+
+        assert_eq!(
+            resolve_codex_self_exe_with(Some(std::ffi::OsString::new()), Some(current_exe.clone()),),
+            Some(current_exe),
+        );
+    }
+
+    #[test]
+    fn resolve_codex_self_exe_rejects_relative_override() {
+        assert_eq!(
+            resolve_codex_self_exe_with(
+                Some(std::ffi::OsString::from("relative/codex.bin")),
+                Some(PathBuf::from("/tmp/wrapper")),
+            ),
+            None,
+        );
     }
 }
