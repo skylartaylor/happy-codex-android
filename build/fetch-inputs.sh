@@ -32,6 +32,10 @@ readonly NINJA_BINARY_SHA256='09f0e5a8a2cf762b24b4d3ed464ffb2529e650d2efc36bab31
 readonly CHROMIUM_RUST_TOOLCHAIN_OBJECT='Linux_x64/rust-toolchain-4c4205163abcbd08948b3efab796c543ba1ea687-2-llvmorg-23-init-10931-g20b6ec66.tar.xz'
 readonly CHROMIUM_RUST_TOOLCHAIN_SHA256='a96863c5b811af23cbe3f20fcfc82939e637be2bd79f05a117f1762c3bb35fe5'
 readonly CHROMIUM_RUST_TOOLCHAIN_SIZE='274625900'
+readonly CHROMIUM_LIBCLANG_FILENAME='lib/libclang.so.23.0.0git'
+readonly CHROMIUM_LIBCLANG_SIZE='107641056'
+readonly CHROMIUM_LIBCLANG_SONAME_LINK='libclang.so.23.0git'
+readonly CHROMIUM_LIBCLANG_LINK='libclang.so'
 readonly CHROMIUM_RUST_TOOLCHAIN_URL="https://storage.googleapis.com/chromium-browser-clang/${CHROMIUM_RUST_TOOLCHAIN_OBJECT}"
 readonly CHROMIUM_CLANG_TOOLCHAIN_OBJECT='Linux_x64/clang-llvmorg-23-init-10931-g20b6ec66-3.tar.xz'
 readonly CHROMIUM_CLANG_TOOLCHAIN_SHA256='f4569980affeb46176ea13dbf3e6dc7d41848c4b73207bfc143575925fca0452'
@@ -358,7 +362,14 @@ readonly RUST_TOOLCHAIN_DIR="$RUSTY_V8_SOURCE/third_party/rust-toolchain"
 mkdir "$RUST_TOOLCHAIN_DIR"
 tar --extract --xz --file "$DOWNLOAD_DIR/chromium-rust-toolchain.tar.xz" \
   --directory "$RUST_TOOLCHAIN_DIR" --no-same-owner
-[[ -x "$RUST_TOOLCHAIN_DIR/bin/rustc" && -d "$RUST_TOOLCHAIN_DIR/lib/rustlib" ]] \
+[[ -x "$RUST_TOOLCHAIN_DIR/bin/rustc" \
+  && -d "$RUST_TOOLCHAIN_DIR/lib/rustlib" \
+  && -f "$RUST_TOOLCHAIN_DIR/$CHROMIUM_LIBCLANG_FILENAME" \
+  && "$(file_size "$RUST_TOOLCHAIN_DIR/$CHROMIUM_LIBCLANG_FILENAME")" == "$CHROMIUM_LIBCLANG_SIZE" \
+  && -L "$RUST_TOOLCHAIN_DIR/lib/$CHROMIUM_LIBCLANG_SONAME_LINK" \
+  && "$(readlink "$RUST_TOOLCHAIN_DIR/lib/$CHROMIUM_LIBCLANG_SONAME_LINK")" == "${CHROMIUM_LIBCLANG_FILENAME##*/}" \
+  && -L "$RUST_TOOLCHAIN_DIR/lib/$CHROMIUM_LIBCLANG_LINK" \
+  && "$(readlink "$RUST_TOOLCHAIN_DIR/lib/$CHROMIUM_LIBCLANG_LINK")" == "$CHROMIUM_LIBCLANG_SONAME_LINK" ]] \
   || fail 'Chromium Rust toolchain is incomplete'
 printf '%s' "$CHROMIUM_RUST_TOOLCHAIN_URL" > "$RUST_TOOLCHAIN_DIR/.rusty_v8_version"
 

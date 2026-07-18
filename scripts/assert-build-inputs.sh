@@ -126,6 +126,14 @@ for archive in ("chromiumRustToolchain", "chromiumClangToolchain", "hostSysroot"
         entry["size"],
         entry["sha256"],
     )
+chromium_libclang = build_inputs["chromiumRustToolchain"]["libclang"]
+require(
+    fetch,
+    chromium_libclang["filename"],
+    chromium_libclang["size"],
+    chromium_libclang["sonameLink"],
+    chromium_libclang["link"],
+)
 
 build = "build/build-rusty-v8.sh"
 require(
@@ -147,6 +155,13 @@ for tool in ("gn", "ninja"):
 for archive in ("chromiumRustToolchain", "chromiumClangToolchain", "hostSysroot"):
     entry = build_inputs[archive]
     require(build, entry["size"], entry["sha256"])
+require(
+    build,
+    chromium_libclang["filename"],
+    chromium_libclang["size"],
+    chromium_libclang["sonameLink"],
+    chromium_libclang["link"],
+)
 
 codex_build = "build/build-codex-android.sh"
 codex = lock["codexBuild"]

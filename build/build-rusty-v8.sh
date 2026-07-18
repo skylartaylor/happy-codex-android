@@ -17,6 +17,10 @@ readonly NINJA_ARCHIVE_SIZE='182403'
 readonly NINJA_BINARY_SHA256='09f0e5a8a2cf762b24b4d3ed464ffb2529e650d2efc36bab31da36aa93791efc'
 readonly CHROMIUM_RUST_TOOLCHAIN_SHA256='a96863c5b811af23cbe3f20fcfc82939e637be2bd79f05a117f1762c3bb35fe5'
 readonly CHROMIUM_RUST_TOOLCHAIN_SIZE='274625900'
+readonly CHROMIUM_LIBCLANG_FILENAME='lib/libclang.so.23.0.0git'
+readonly CHROMIUM_LIBCLANG_SIZE='107641056'
+readonly CHROMIUM_LIBCLANG_SONAME_LINK='libclang.so.23.0git'
+readonly CHROMIUM_LIBCLANG_LINK='libclang.so'
 readonly CHROMIUM_CLANG_TOOLCHAIN_SHA256='f4569980affeb46176ea13dbf3e6dc7d41848c4b73207bfc143575925fca0452'
 readonly CHROMIUM_CLANG_TOOLCHAIN_SIZE='69665364'
 readonly CHROMIUM_CLANG_TOOLCHAIN_VERSION='llvmorg-23-init-10931-g20b6ec66-3'
@@ -226,7 +230,13 @@ printf '%s  %s\n' "$NINJA_BINARY_SHA256" "$NINJA_BINARY" | sha256sum --check --s
 grep --fixed-strings --line-regexp 'Pkg.Revision = 28.2.13676358' "$NDK_HOME/source.properties" >/dev/null \
   || fail 'extracted NDK has an unexpected revision'
 [[ -x "$CHROMIUM_RUST_TOOLCHAIN/bin/rustc" \
-  && -d "$CHROMIUM_RUST_TOOLCHAIN/lib/rustlib" ]] \
+  && -d "$CHROMIUM_RUST_TOOLCHAIN/lib/rustlib" \
+  && -f "$CHROMIUM_RUST_TOOLCHAIN/$CHROMIUM_LIBCLANG_FILENAME" \
+  && "$(file_size "$CHROMIUM_RUST_TOOLCHAIN/$CHROMIUM_LIBCLANG_FILENAME")" == "$CHROMIUM_LIBCLANG_SIZE" \
+  && -L "$CHROMIUM_RUST_TOOLCHAIN/lib/$CHROMIUM_LIBCLANG_SONAME_LINK" \
+  && "$(readlink "$CHROMIUM_RUST_TOOLCHAIN/lib/$CHROMIUM_LIBCLANG_SONAME_LINK")" == "${CHROMIUM_LIBCLANG_FILENAME##*/}" \
+  && -L "$CHROMIUM_RUST_TOOLCHAIN/lib/$CHROMIUM_LIBCLANG_LINK" \
+  && "$(readlink "$CHROMIUM_RUST_TOOLCHAIN/lib/$CHROMIUM_LIBCLANG_LINK")" == "$CHROMIUM_LIBCLANG_SONAME_LINK" ]] \
   || fail 'pinned Chromium Rust installation is incomplete'
 [[ -x "$CHROMIUM_CLANG_TOOLCHAIN/bin/clang" \
   && -f "$CHROMIUM_CLANG_TOOLCHAIN/cr_build_revision" ]] \
@@ -259,12 +269,20 @@ patch_android_ndk_version "$RUSTY_V8_SOURCE/build/config/android/config.gni"
 patch_binding_aliases "$RUSTY_V8_SOURCE/src/binding.rs"
 
 readonly NDK_BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-readonly NDK_LIB="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib"
 readonly BUILTINS_ARCHIVE="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/19/lib/linux/libclang_rt.builtins-aarch64-android.a"
 [[ -x "$NDK_BIN/aarch64-linux-android29-clang" \
-  && -f "$NDK_LIB/libclang.so" \
   && -f "$BUILTINS_ARCHIVE" ]] \
-  || fail 'NDK compiler, libclang, or compiler-rt builtins archive is missing'
+  || fail 'NDK compiler or compiler-rt builtins archive is missing'
+
+# Pair libclang and clang from the same pinned Chromium LLVM revision. The Rust
+# archive carries libclang while the smaller Clang archive carries the compiler
+# binary and resource headers expected by rusty_v8's bindgen setup.
+readonly BINDGEN_TOOLCHAIN="$TARGET_DIR/bindgen-toolchain"
+[[ ! -e "$BINDGEN_TOOLCHAIN" ]] || fail 'bindgen toolchain path already exists'
+mkdir -p "$BINDGEN_TOOLCHAIN/bin" "$BINDGEN_TOOLCHAIN/lib"
+ln -s "$CHROMIUM_CLANG_TOOLCHAIN/bin/clang" "$BINDGEN_TOOLCHAIN/bin/clang"
+ln -s "$CHROMIUM_RUST_TOOLCHAIN/lib/$CHROMIUM_LIBCLANG_LINK" \
+  "$BINDGEN_TOOLCHAIN/lib/$CHROMIUM_LIBCLANG_LINK"
 
 # The outer rusty_v8 bindgen invocation needs Android target flags. Chromium's
 # nested host-side bindgen actions already receive complete GN-generated flags,
@@ -285,7 +303,7 @@ export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang"
 export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang++"
 export RANLIB_aarch64_linux_android="$NDK_BIN/llvm-ranlib"
 export CLANG_BASE_PATH="$CHROMIUM_CLANG_TOOLCHAIN"
-export LIBCLANG_PATH="$NDK_LIB"
+export LIBCLANG_PATH="$BINDGEN_TOOLCHAIN/lib"
 export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android --sysroot=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 export GN
 export NINJA="$NINJA_WRAPPER"
