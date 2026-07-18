@@ -18,6 +18,7 @@ documents = {
         "build/Dockerfile.builder",
         "build/fetch-inputs.sh",
         "build/build-rusty-v8.sh",
+        "build/build-codex-android.sh",
     )
 }
 
@@ -146,6 +147,40 @@ for tool in ("gn", "ninja"):
 for archive in ("chromiumRustToolchain", "hostSysroot"):
     entry = build_inputs[archive]
     require(build, entry["size"], entry["sha256"])
+
+codex_build = "build/build-codex-android.sh"
+codex = lock["codexBuild"]
+release_gate = lock["releaseGate"]
+require(
+    codex_build,
+    release_gate["downstreamCommit"],
+    release_gate["downstreamCargoLockSha256"],
+    android["targetTriple"],
+    android["apiLevel"],
+    android["targetEnvironment"]["sha256"],
+    ndk["version"],
+    rust["version"],
+    v8["commit"],
+    v8["crateVersion"],
+    codex["version"],
+    codex["cargoPackage"],
+    codex["binary"],
+    codex["cargoHomeCompletionMarker"],
+    *codex["rustyV8Artifacts"].values(),
+    *codex["elf"]["neededAllowlist"],
+    *codex["package"].values(),
+)
+require(
+    docker,
+    "build-codex-android.sh",
+    "ANDROID_INPUTS_LOCK",
+)
+require(
+    fetch,
+    "downstreamCommit",
+    "downstreamCargoLockSha256",
+    codex["cargoHomeCompletionMarker"],
+)
 
 print("PASS: build scripts match the frozen Android input manifest")
 PY

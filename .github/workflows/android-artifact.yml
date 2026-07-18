@@ -1,0 +1,292 @@
+name: Happy Codex Android artifact
+
+run-name: Android artifact from ${{ github.ref_name }} at ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: happy-codex-android-artifact-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BUILDER_IMAGE: happy-codex-android-builder
+
+jobs:
+  validate-source:
+    name: Validate frozen source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate pipeline syntax and frozen inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool android-patches.json >/dev/null
+          python3 -m json.tool build/inputs.lock.json >/dev/null
+          bash -n build/android-target.env
+          bash -n build/fetch-inputs.sh
+          bash -n build/build-rusty-v8.sh
+          bash -n build/build-codex-android.sh
+          bash scripts/assert-build-inputs.sh
+          bash scripts/assert-upstream-base.sh
+          bash scripts/assert-source-boundary.sh
+          bash scripts/assert-managed-updates-disabled.sh
+
+  build-rusty-v8:
+    name: Build pinned rusty_v8
+    needs: validate-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Reclaim runner disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /opt/hostedtoolcache /usr/local/lib/android /usr/share/dotnet
+          docker system prune --all --force
+          df -h /
+
+      - name: Build pinned builder image
+        shell: bash
+        run: |
+          set -euo pipefail
+          context="${RUNNER_TEMP}/android-builder-context"
+          mkdir -p "${context}/build"
+          install -m 0644 \
+            build/Dockerfile.builder \
+            build/android-target.env \
+            build/inputs.lock.json \
+            build/rusty-v8-submodules.lock \
+            "${context}/build/"
+          install -m 0755 \
+            build/fetch-inputs.sh \
+            build/build-rusty-v8.sh \
+            build/build-codex-android.sh \
+            "${context}/build/"
+          docker build \
+            --pull \
+            --no-cache \
+            --platform linux/amd64 \
+            --file "${context}/build/Dockerfile.builder" \
+            --tag "${BUILDER_IMAGE}" \
+            "${context}"
+
+      - name: Fetch and verify frozen inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/android-inputs"
+          docker run --rm \
+            --network bridge \
+            --mount "type=bind,src=${GITHUB_WORKSPACE},dst=/workspace,readonly" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-inputs,dst=/work/inputs" \
+            --env FETCH_JOBS=8 \
+            "${BUILDER_IMAGE}" \
+            /workspace/build/fetch-inputs.sh /work/inputs /workspace
+
+      - name: Build rusty_v8 without network access
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/android-v8"
+          docker run --rm \
+            --network none \
+            --mount "type=bind,src=${GITHUB_WORKSPACE},dst=/workspace,readonly" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-inputs,dst=/work/inputs" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-v8,dst=/work/v8" \
+            --env "JOBS=$(nproc)" \
+            "${BUILDER_IMAGE}" \
+            /workspace/build/build-rusty-v8.sh /work/inputs /work/v8
+
+      - name: Verify relocatable rusty_v8 artifact set
+        shell: bash
+        run: |
+          set -euo pipefail
+          v8_dir="${RUNNER_TEMP}/android-v8"
+          manifest="${v8_dir}/rusty-v8-artifacts.sha256"
+          relocated="${RUNNER_TEMP}/rusty-v8-artifacts-relocated.sha256"
+          expected="${RUNNER_TEMP}/rusty-v8-artifacts-expected"
+          actual="${RUNNER_TEMP}/rusty-v8-artifacts-actual"
+
+          awk '
+            NF != 2 || length($1) != 64 || $1 ~ /[^0-9a-f]/ { exit 1 }
+            {
+              count = split($2, parts, "/")
+              print $1 "  " parts[count]
+            }
+          ' "${manifest}" > "${relocated}"
+          cat > "${expected}" <<'EOF'
+          librusty_v8_release_aarch64-linux-android.a
+          librusty_v8_release_aarch64-linux-android.a.gz
+          src_binding_release_aarch64-linux-android.rs
+          EOF
+          awk '{ print $2 }' "${relocated}" | sort > "${actual}"
+          diff --unified "${expected}" "${actual}"
+          (cd "${v8_dir}" && sha256sum --strict --check "${relocated}")
+
+      - name: Upload rusty_v8 artifacts
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: happy-codex-rusty-v8-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/android-v8/librusty_v8_release_aarch64-linux-android.a.gz
+            ${{ runner.temp }}/android-v8/src_binding_release_aarch64-linux-android.rs
+            ${{ runner.temp }}/android-v8/rusty-v8-artifacts.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  build-codex:
+    name: Build Happy-managed Codex
+    needs:
+      - validate-source
+      - build-rusty-v8
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download rusty_v8 artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: happy-codex-rusty-v8-${{ github.sha }}
+          path: ${{ runner.temp }}/android-v8
+
+      - name: Restore and verify rusty_v8 artifact set
+        shell: bash
+        run: |
+          set -euo pipefail
+          v8_dir="${RUNNER_TEMP}/android-v8"
+          gzip --decompress --keep \
+            "${v8_dir}/librusty_v8_release_aarch64-linux-android.a.gz"
+          relocated="${RUNNER_TEMP}/rusty-v8-artifacts-relocated.sha256"
+          awk '
+            NF != 2 || length($1) != 64 || $1 ~ /[^0-9a-f]/ { exit 1 }
+            {
+              count = split($2, parts, "/")
+              print $1 "  " parts[count]
+            }
+          ' "${v8_dir}/rusty-v8-artifacts.sha256" > "${relocated}"
+          (cd "${v8_dir}" && sha256sum --strict --check "${relocated}")
+
+      - name: Reclaim runner disk
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /opt/hostedtoolcache /usr/local/lib/android /usr/share/dotnet
+          docker system prune --all --force
+          df -h /
+
+      - name: Build pinned builder image
+        shell: bash
+        run: |
+          set -euo pipefail
+          context="${RUNNER_TEMP}/android-builder-context"
+          mkdir -p "${context}/build"
+          install -m 0644 \
+            build/Dockerfile.builder \
+            build/android-target.env \
+            build/inputs.lock.json \
+            build/rusty-v8-submodules.lock \
+            "${context}/build/"
+          install -m 0755 \
+            build/fetch-inputs.sh \
+            build/build-rusty-v8.sh \
+            build/build-codex-android.sh \
+            "${context}/build/"
+          docker build \
+            --pull \
+            --no-cache \
+            --platform linux/amd64 \
+            --file "${context}/build/Dockerfile.builder" \
+            --tag "${BUILDER_IMAGE}" \
+            "${context}"
+
+      - name: Fetch and verify frozen inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/android-inputs"
+          docker run --rm \
+            --network bridge \
+            --mount "type=bind,src=${GITHUB_WORKSPACE},dst=/workspace,readonly" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-inputs,dst=/work/inputs" \
+            --env FETCH_JOBS=8 \
+            "${BUILDER_IMAGE}" \
+            /workspace/build/fetch-inputs.sh /work/inputs /workspace
+
+      - name: Build Codex without network access
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/android-dist"
+          docker run --rm \
+            --network none \
+            --mount "type=bind,src=${GITHUB_WORKSPACE},dst=/workspace,readonly" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-inputs,dst=/work/inputs" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-v8,dst=/work/v8,readonly" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-dist,dst=/work/dist" \
+            --env "JOBS=$(nproc)" \
+            "${BUILDER_IMAGE}" \
+            /workspace/build/build-codex-android.sh \
+              /work/inputs /work/v8 /work/dist
+
+      - name: Verify packaged Codex artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          dist="${RUNNER_TEMP}/android-dist"
+          package_root="happy-codex-android-aarch64-v0.144.4"
+          archive="${package_root}.tar.gz"
+          checksum="${archive}.sha256"
+          test -s "${dist}/${archive}"
+          test -f "${dist}/${checksum}"
+          (cd "${dist}" && sha256sum --strict --check "${checksum}")
+
+          tar --list --gzip --file="${dist}/${archive}" \
+            > "${RUNNER_TEMP}/codex-android-archive-members"
+          grep --fixed-strings --line-regexp \
+            "${package_root}/bin/codex" \
+            "${RUNNER_TEMP}/codex-android-archive-members" >/dev/null
+          grep --fixed-strings --line-regexp \
+            "${package_root}/artifact-manifest.json" \
+            "${RUNNER_TEMP}/codex-android-archive-members" >/dev/null
+          if grep --extended-regexp '(^/|(^|/)\.\.(/|$))' \
+            "${RUNNER_TEMP}/codex-android-archive-members"; then
+            echo "Codex archive contains an unsafe member path." >&2
+            exit 1
+          fi
+
+      - name: Upload Happy Codex Android artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: happy-codex-android-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/android-dist/happy-codex-android-aarch64-v0.144.4.tar.gz
+            ${{ runner.temp }}/android-dist/happy-codex-android-aarch64-v0.144.4.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

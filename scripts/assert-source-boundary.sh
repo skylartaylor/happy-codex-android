@@ -48,9 +48,11 @@ if any(not path.startswith("codex-rs/") for path in paths):
 allowed_source = set(paths)
 allowed_policy = {
     ".gitignore",
+    ".github/workflows/android-artifact.yml",
     ".github/workflows/source-checks.yml",
     "android-patches.json",
     "build/android-target.env",
+    "build/build-codex-android.sh",
     "build/build-rusty-v8.sh",
     "build/Dockerfile.builder",
     "build/fetch-inputs.sh",
@@ -60,6 +62,7 @@ allowed_policy = {
     "scripts/assert-managed-updates-disabled.sh",
     "scripts/assert-source-boundary.sh",
     "scripts/assert-upstream-base.sh",
+    "scripts/install-codex-termux-adb.sh",
 }
 
 upstream_commit = manifest["upstream"]["commit"]

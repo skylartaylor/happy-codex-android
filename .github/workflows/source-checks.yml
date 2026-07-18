@@ -9,6 +9,8 @@ on:
       - build/**
       - codex-rs/**
       - scripts/assert-*.sh
+      - scripts/install-codex-termux-adb.sh
+      - .github/workflows/android-artifact.yml
       - .github/workflows/source-checks.yml
   pull_request:
     paths:
@@ -16,6 +18,8 @@ on:
       - build/**
       - codex-rs/**
       - scripts/assert-*.sh
+      - scripts/install-codex-termux-adb.sh
+      - .github/workflows/android-artifact.yml
       - .github/workflows/source-checks.yml
   workflow_dispatch:
 
@@ -46,10 +50,12 @@ jobs:
           bash -n build/android-target.env
           bash -n build/fetch-inputs.sh
           bash -n build/build-rusty-v8.sh
+          bash -n build/build-codex-android.sh
           bash -n scripts/assert-build-inputs.sh
           bash -n scripts/assert-upstream-base.sh
           bash -n scripts/assert-source-boundary.sh
           bash -n scripts/assert-managed-updates-disabled.sh
+          bash -n scripts/install-codex-termux-adb.sh
 
       - name: Verify locked rusty_v8 submodules
         shell: bash
