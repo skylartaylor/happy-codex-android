@@ -17,6 +17,9 @@ readonly NINJA_ARCHIVE_SIZE='182403'
 readonly NINJA_BINARY_SHA256='09f0e5a8a2cf762b24b4d3ed464ffb2529e650d2efc36bab31da36aa93791efc'
 readonly CHROMIUM_RUST_TOOLCHAIN_SHA256='a96863c5b811af23cbe3f20fcfc82939e637be2bd79f05a117f1762c3bb35fe5'
 readonly CHROMIUM_RUST_TOOLCHAIN_SIZE='274625900'
+readonly CHROMIUM_CLANG_TOOLCHAIN_SHA256='f4569980affeb46176ea13dbf3e6dc7d41848c4b73207bfc143575925fca0452'
+readonly CHROMIUM_CLANG_TOOLCHAIN_SIZE='69665364'
+readonly CHROMIUM_CLANG_TOOLCHAIN_VERSION='llvmorg-23-init-10931-g20b6ec66-3'
 readonly SYSROOT_SHA256='52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d'
 readonly SYSROOT_SIZE='19727236'
 readonly SUBMODULE_LOCK_SHA256='a2e79ba15ab1f59e5701ca8ca9eb4d7a5bd613d6b4f421f5220fc2977499d9dd'
@@ -175,6 +178,7 @@ readonly NDK_HOME="$INPUT_ROOT/android-ndk-r28c"
 readonly GN="$INPUT_ROOT/tools/gn/gn"
 readonly NINJA="$INPUT_ROOT/tools/ninja/ninja"
 readonly CHROMIUM_RUST_TOOLCHAIN="$RUSTY_V8_SOURCE/third_party/rust-toolchain"
+readonly CHROMIUM_CLANG_TOOLCHAIN="$INPUT_ROOT/tools/chromium-clang"
 readonly SYSROOT_DIR="$INPUT_ROOT/sysroots/debian_bullseye_amd64-sysroot"
 readonly TARGET_DIR="$INPUT_ROOT/target"
 readonly CARGO_CACHE_DIR="$INPUT_ROOT/cargo-home"
@@ -209,7 +213,10 @@ verify_file "$DOWNLOAD_DIR/gn.cipd" "$GN_ARCHIVE_SHA256" "$GN_ARCHIVE_SIZE" 'GN 
 verify_file "$DOWNLOAD_DIR/ninja.cipd" "$NINJA_ARCHIVE_SHA256" "$NINJA_ARCHIVE_SIZE" 'Ninja CIPD archive'
 verify_file "$DOWNLOAD_DIR/chromium-rust-toolchain.tar.xz" \
   "$CHROMIUM_RUST_TOOLCHAIN_SHA256" "$CHROMIUM_RUST_TOOLCHAIN_SIZE" \
-  'Chromium Rust and Clang toolchain'
+  'Chromium Rust toolchain'
+verify_file "$DOWNLOAD_DIR/chromium-clang-toolchain.tar.xz" \
+  "$CHROMIUM_CLANG_TOOLCHAIN_SHA256" "$CHROMIUM_CLANG_TOOLCHAIN_SIZE" \
+  'Chromium Clang toolchain'
 verify_file "$DOWNLOAD_DIR/debian-bullseye-amd64-sysroot.tar.xz" \
   "$SYSROOT_SHA256" "$SYSROOT_SIZE" 'Chromium amd64 sysroot'
 printf '%s  %s\n' "$GN_BINARY_SHA256" "$GN" | sha256sum --check --strict - >/dev/null \
@@ -218,8 +225,15 @@ printf '%s  %s\n' "$NINJA_BINARY_SHA256" "$NINJA" | sha256sum --check --strict -
   || fail 'Ninja binary failed verification'
 grep --fixed-strings --line-regexp 'Pkg.Revision = 28.2.13676358' "$NDK_HOME/source.properties" >/dev/null \
   || fail 'extracted NDK has an unexpected revision'
-[[ -x "$CHROMIUM_RUST_TOOLCHAIN/bin/clang" && -f "$CHROMIUM_RUST_TOOLCHAIN/lib/libclang.so" ]] \
-  || fail 'pinned Chromium clang installation is incomplete'
+[[ -x "$CHROMIUM_RUST_TOOLCHAIN/bin/rustc" \
+  && -d "$CHROMIUM_RUST_TOOLCHAIN/lib/rustlib" ]] \
+  || fail 'pinned Chromium Rust installation is incomplete'
+[[ -x "$CHROMIUM_CLANG_TOOLCHAIN/bin/clang" \
+  && -f "$CHROMIUM_CLANG_TOOLCHAIN/cr_build_revision" ]] \
+  || fail 'pinned Chromium Clang installation is incomplete'
+grep --fixed-strings --line-regexp "$CHROMIUM_CLANG_TOOLCHAIN_VERSION" \
+  "$CHROMIUM_CLANG_TOOLCHAIN/cr_build_revision" >/dev/null \
+  || fail 'pinned Chromium Clang installation has an unexpected revision'
 [[ -d "$SYSROOT_DIR" && -f "$SYSROOT_DIR/.stamp" ]] \
   || fail 'pinned Chromium sysroot installation is incomplete'
 
@@ -245,9 +259,12 @@ patch_android_ndk_version "$RUSTY_V8_SOURCE/build/config/android/config.gni"
 patch_binding_aliases "$RUSTY_V8_SOURCE/src/binding.rs"
 
 readonly NDK_BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+readonly NDK_LIB="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib"
 readonly BUILTINS_ARCHIVE="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/19/lib/linux/libclang_rt.builtins-aarch64-android.a"
-[[ -x "$NDK_BIN/aarch64-linux-android29-clang" && -f "$BUILTINS_ARCHIVE" ]] \
-  || fail 'NDK compiler or compiler-rt builtins archive is missing'
+[[ -x "$NDK_BIN/aarch64-linux-android29-clang" \
+  && -f "$NDK_LIB/libclang.so" \
+  && -f "$BUILTINS_ARCHIVE" ]] \
+  || fail 'NDK compiler, libclang, or compiler-rt builtins archive is missing'
 
 export ANDROID_NDK_HOME="$NDK_HOME"
 export ANDROID_NDK_ROOT="$NDK_HOME"
@@ -255,8 +272,8 @@ export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
 export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang"
 export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android29-clang++"
 export RANLIB_aarch64_linux_android="$NDK_BIN/llvm-ranlib"
-export CLANG_BASE_PATH="$CHROMIUM_RUST_TOOLCHAIN"
-export LIBCLANG_PATH="$CHROMIUM_RUST_TOOLCHAIN/lib"
+export CLANG_BASE_PATH="$CHROMIUM_CLANG_TOOLCHAIN"
+export LIBCLANG_PATH="$NDK_LIB"
 export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android --sysroot=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 export GN
 export NINJA

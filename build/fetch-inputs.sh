@@ -33,6 +33,11 @@ readonly CHROMIUM_RUST_TOOLCHAIN_OBJECT='Linux_x64/rust-toolchain-4c4205163abcbd
 readonly CHROMIUM_RUST_TOOLCHAIN_SHA256='a96863c5b811af23cbe3f20fcfc82939e637be2bd79f05a117f1762c3bb35fe5'
 readonly CHROMIUM_RUST_TOOLCHAIN_SIZE='274625900'
 readonly CHROMIUM_RUST_TOOLCHAIN_URL="https://storage.googleapis.com/chromium-browser-clang/${CHROMIUM_RUST_TOOLCHAIN_OBJECT}"
+readonly CHROMIUM_CLANG_TOOLCHAIN_OBJECT='Linux_x64/clang-llvmorg-23-init-10931-g20b6ec66-3.tar.xz'
+readonly CHROMIUM_CLANG_TOOLCHAIN_SHA256='f4569980affeb46176ea13dbf3e6dc7d41848c4b73207bfc143575925fca0452'
+readonly CHROMIUM_CLANG_TOOLCHAIN_SIZE='69665364'
+readonly CHROMIUM_CLANG_TOOLCHAIN_URL="https://commondatastorage.googleapis.com/chromium-browser-clang/${CHROMIUM_CLANG_TOOLCHAIN_OBJECT}"
+readonly CHROMIUM_CLANG_TOOLCHAIN_VERSION='llvmorg-23-init-10931-g20b6ec66-3'
 
 readonly SYSROOT_SHA256='52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d'
 readonly SYSROOT_SIZE='19727236'
@@ -301,7 +306,11 @@ fetch_cipd "$NINJA_PACKAGE" "$NINJA_INSTANCE" "$NINJA_ARCHIVE_SHA256" "$NINJA_AR
 download_verified "$CHROMIUM_RUST_TOOLCHAIN_URL" \
   "$DOWNLOAD_DIR/chromium-rust-toolchain.tar.xz" \
   "$CHROMIUM_RUST_TOOLCHAIN_SHA256" "$CHROMIUM_RUST_TOOLCHAIN_SIZE" \
-  'Chromium Rust and Clang toolchain'
+  'Chromium Rust toolchain'
+download_verified "$CHROMIUM_CLANG_TOOLCHAIN_URL" \
+  "$DOWNLOAD_DIR/chromium-clang-toolchain.tar.xz" \
+  "$CHROMIUM_CLANG_TOOLCHAIN_SHA256" "$CHROMIUM_CLANG_TOOLCHAIN_SIZE" \
+  'Chromium Clang toolchain'
 download_verified "$SYSROOT_URL" "$DOWNLOAD_DIR/debian-bullseye-amd64-sysroot.tar.xz" \
   "$SYSROOT_SHA256" "$SYSROOT_SIZE" 'Chromium amd64 sysroot'
 
@@ -349,9 +358,23 @@ readonly RUST_TOOLCHAIN_DIR="$RUSTY_V8_SOURCE/third_party/rust-toolchain"
 mkdir "$RUST_TOOLCHAIN_DIR"
 tar --extract --xz --file "$DOWNLOAD_DIR/chromium-rust-toolchain.tar.xz" \
   --directory "$RUST_TOOLCHAIN_DIR" --no-same-owner
-[[ -x "$RUST_TOOLCHAIN_DIR/bin/clang" && -f "$RUST_TOOLCHAIN_DIR/lib/libclang.so" ]] \
-  || fail 'Chromium Rust toolchain did not contain clang and libclang'
+[[ -x "$RUST_TOOLCHAIN_DIR/bin/rustc" && -d "$RUST_TOOLCHAIN_DIR/lib/rustlib" ]] \
+  || fail 'Chromium Rust toolchain is incomplete'
 printf '%s' "$CHROMIUM_RUST_TOOLCHAIN_URL" > "$RUST_TOOLCHAIN_DIR/.rusty_v8_version"
+
+readonly CLANG_TOOLCHAIN_DIR="$TOOL_ROOT/chromium-clang"
+[[ ! -e "$CLANG_TOOLCHAIN_DIR" ]] || fail 'Chromium Clang toolchain directory already exists'
+mkdir "$CLANG_TOOLCHAIN_DIR"
+tar --extract --xz --file "$DOWNLOAD_DIR/chromium-clang-toolchain.tar.xz" \
+  --directory "$CLANG_TOOLCHAIN_DIR" --no-same-owner
+[[ -x "$CLANG_TOOLCHAIN_DIR/bin/clang" \
+  && -f "$CLANG_TOOLCHAIN_DIR/cr_build_revision" ]] \
+  || fail 'Chromium Clang toolchain is incomplete'
+grep --fixed-strings --line-regexp "$CHROMIUM_CLANG_TOOLCHAIN_VERSION" \
+  "$CLANG_TOOLCHAIN_DIR/cr_build_revision" >/dev/null \
+  || fail 'Chromium Clang toolchain has an unexpected revision'
+[[ -f "$INPUT_ROOT/android-ndk-r28c/toolchains/llvm/prebuilt/linux-x86_64/lib/libclang.so" ]] \
+  || fail 'Android NDK libclang is unavailable for bindgen'
 
 readonly SYSROOT_DIR="$INPUT_ROOT/sysroots/debian_bullseye_amd64-sysroot"
 [[ ! -e "$SYSROOT_DIR" ]] || fail 'Chromium sysroot directory already exists'
@@ -382,6 +405,7 @@ gn_archive_sha256=${GN_ARCHIVE_SHA256}
 ninja_cipd_instance=${NINJA_INSTANCE}
 ninja_archive_sha256=${NINJA_ARCHIVE_SHA256}
 chromium_rust_toolchain_sha256=${CHROMIUM_RUST_TOOLCHAIN_SHA256}
+chromium_clang_toolchain_sha256=${CHROMIUM_CLANG_TOOLCHAIN_SHA256}
 sysroot_sha256=${SYSROOT_SHA256}
 codex_source_commit=${CODEX_SOURCE_COMMIT}
 codex_cargo_lock_sha256=${CODEX_CARGO_LOCK_SHA256}

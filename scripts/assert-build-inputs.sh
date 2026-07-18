@@ -116,7 +116,7 @@ for tool in ("gn", "ninja"):
         entry["archiveSha256"],
         entry["binarySha256"],
     )
-for archive in ("chromiumRustToolchain", "hostSysroot"):
+for archive in ("chromiumRustToolchain", "chromiumClangToolchain", "hostSysroot"):
     entry = build_inputs[archive]
     url = urlsplit(entry["url"])
     require(
@@ -144,7 +144,7 @@ require(
 for tool in ("gn", "ninja"):
     entry = build_inputs[tool]
     require(build, entry["archiveSize"], entry["archiveSha256"], entry["binarySha256"])
-for archive in ("chromiumRustToolchain", "hostSysroot"):
+for archive in ("chromiumRustToolchain", "chromiumClangToolchain", "hostSysroot"):
     entry = build_inputs[archive]
     require(build, entry["size"], entry["sha256"])
 
