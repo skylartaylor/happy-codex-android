@@ -378,7 +378,7 @@ grep --fixed-strings --line-regexp "$CHROMIUM_CLANG_TOOLCHAIN_VERSION" \
 
 readonly SYSROOT_DIR="$INPUT_ROOT/sysroots/debian_bullseye_amd64-sysroot"
 [[ ! -e "$SYSROOT_DIR" ]] || fail 'Chromium sysroot directory already exists'
-mkdir "$SYSROOT_DIR"
+mkdir -p "$SYSROOT_DIR"
 tar --extract --xz --file "$DOWNLOAD_DIR/debian-bullseye-amd64-sysroot.tar.xz" \
   --directory "$SYSROOT_DIR" --no-same-owner
 printf '%s' "$SYSROOT_URL" > "$SYSROOT_DIR/.stamp"
