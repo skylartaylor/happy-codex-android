@@ -122,8 +122,8 @@
     }
   },
   "releaseGate": {
-    "downstreamCommit": null,
-    "downstreamCargoLockSha256": null,
-    "blockedUntilFrozen": true
+    "downstreamCommit": "ab9c3ec845b913c2a9adf23a60c4d04f65c647b1",
+    "downstreamCargoLockSha256": "221542fd6c8d48fec346a6684cadc7bcbc110fa2a0f7f2e574b22523e0ef5f75",
+    "blockedUntilFrozen": false
   }
 }

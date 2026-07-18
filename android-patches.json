@@ -7,8 +7,8 @@
   },
   "downstream": {
     "branch": "happy/android-v0.144.4",
-    "commit": null,
-    "state": "working_tree_not_frozen"
+    "commit": "ab9c3ec845b913c2a9adf23a60c4d04f65c647b1",
+    "state": "source_commit_frozen"
   },
   "excludedForkChanges": [
     "provider or feedback endpoint redirects",

@@ -7,12 +7,31 @@ cd "$repo_root"
 
 python3 - <<'PY'
 import json
+import hashlib
 import subprocess
 from pathlib import Path
 
 manifest = json.loads(Path("android-patches.json").read_text())
+inputs = json.loads(Path("build/inputs.lock.json").read_text())
 if manifest.get("schemaVersion") != 1:
     raise SystemExit("unsupported android-patches.json schema")
+
+downstream = manifest.get("downstream", {})
+release_gate = inputs.get("releaseGate", {})
+downstream_commit = downstream.get("commit")
+if downstream.get("state") != "source_commit_frozen" or not downstream_commit:
+    raise SystemExit("downstream Android source commit is not frozen")
+if release_gate.get("blockedUntilFrozen") is not False:
+    raise SystemExit("Android source release gate is still marked unfrozen")
+if release_gate.get("downstreamCommit") != downstream_commit:
+    raise SystemExit("downstream source commit differs across policy manifests")
+actual_cargo_lock = hashlib.sha256(Path("codex-rs/Cargo.lock").read_bytes()).hexdigest()
+if release_gate.get("downstreamCargoLockSha256") != actual_cargo_lock:
+    raise SystemExit("downstream Cargo.lock differs from the frozen release gate")
+subprocess.run(
+    ["git", "merge-base", "--is-ancestor", downstream_commit, "HEAD"],
+    check=True,
+)
 
 paths = []
 for patch in manifest.get("patches", []):
