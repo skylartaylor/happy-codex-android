@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "state": "initial_android_candidate_inputs_frozen",
+  "source": {
+    "repository": "https://github.com/openai/codex",
+    "tag": "rust-v0.144.4",
+    "tagObject": "632c07017ed17f00ca6d911b754683dee785af69",
+    "commit": "8c68d4c87dc54d38861f5114e920c3de2efa5876",
+    "tree": "d6dab766c34a30ef1cd9c963c6ed6754e7367234",
+    "sourceDateEpoch": 1784002837,
+    "cargoLockSha256": "175793a40a3147db1fee08fd9db0acc59312c344b3513dd7ee316f5446d8119e",
+    "rustToolchainSha256": "570656042681cfd8795403a455baf9a33035331a07db0645e866bbcea89a3d64"
+  },
+  "builder": {
+    "baseImage": "ubuntu:24.04",
+    "imageIndexDigest": "sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90",
+    "linuxAmd64ManifestDigest": "sha256:52df9b1ee71626e0088f7d400d5c6b5f7bb916f8f0c82b474289a4ece6cf3faf",
+    "ubuntuSnapshot": "20260715T000000Z"
+  },
+  "android": {
+    "targetTriple": "aarch64-linux-android",
+    "abi": "arm64-v8a",
+    "apiLevel": 29,
+    "ndk": {
+      "revision": "r28c",
+      "version": "28.2.13676358",
+      "linuxArchiveUrl": "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip",
+      "linuxArchiveSize": 722261334,
+      "linuxArchiveSha1": "a7b54a5de87fecd125a17d54f73c446199e72a64",
+      "linuxArchiveSha256": "dfb20d396df28ca02a8c708314b814a4d961dc9074f9a161932746f815aa552f"
+    },
+    "targetEnvironment": {
+      "path": "build/android-target.env",
+      "sha256": "1524456f7a6daab6e433248056dc136730a608d2e7f3079405927d636d0e15d3"
+    }
+  },
+  "rust": {
+    "version": "1.95.0",
+    "artifacts": [
+      {
+        "component": "rustc",
+        "target": "x86_64-unknown-linux-gnu",
+        "url": "https://static.rust-lang.org/dist/2026-04-16/rustc-1.95.0-x86_64-unknown-linux-gnu.tar.gz",
+        "size": 135179262,
+        "sha256": "fef749c4abb4b4bde5ebf773bec550003ce5b4410579cecd69a365e5c0c5106a"
+      },
+      {
+        "component": "cargo",
+        "target": "x86_64-unknown-linux-gnu",
+        "url": "https://static.rust-lang.org/dist/2026-04-16/cargo-1.95.0-x86_64-unknown-linux-gnu.tar.gz",
+        "size": 15405121,
+        "sha256": "47ebc468721a6ff3fb27dff33e632a4cb6246d0ea061814bcd4fe601d18c69a8"
+      },
+      {
+        "component": "rust-std",
+        "target": "x86_64-unknown-linux-gnu",
+        "url": "https://static.rust-lang.org/dist/2026-04-16/rust-std-1.95.0-x86_64-unknown-linux-gnu.tar.gz",
+        "size": 49435219,
+        "sha256": "edbd20f8fc0a617f85ffb79fa6c22aa6def0e570de3f94be1a6e5ab1f77f763c"
+      },
+      {
+        "component": "rust-std",
+        "target": "aarch64-linux-android",
+        "url": "https://static.rust-lang.org/dist/2026-04-16/rust-std-1.95.0-aarch64-linux-android.tar.gz",
+        "size": 40649293,
+        "sha256": "90de6cc98ec27a824429bf8b9140ced0dfa9947d69b0ae0d20f4700e0b437c5e"
+      },
+      {
+        "component": "rust-src",
+        "target": "*",
+        "url": "https://static.rust-lang.org/dist/2026-04-16/rust-src-1.95.0.tar.gz",
+        "size": 5823939,
+        "sha256": "98548815569318eb60afe7189ace6bca4ba6e4ae59a54f111d276ab78d6ddd10"
+      }
+    ]
+  },
+  "rustyV8": {
+    "repository": "https://github.com/denoland/rusty_v8",
+    "tag": "v149.2.0",
+    "commit": "5d0e31ea6bf67f4559faa759b91e22bc3f1cd696",
+    "tree": "5be84cd4738a11739bdec4d1c5c392f16263121f",
+    "sourceDateEpoch": 1779728126,
+    "crateVersion": "149.2.0",
+    "crateChecksum": "46dccf61a364b61bbaac70a8ba64a1a1006e87123b7d62eaeec999a3ba31ecdb",
+    "cargoLockSha256": "ae9a372644c9f04bc33c11c121ec7a7fcf510e7f8173246621f621850c5735ae",
+    "cargoTomlSha256": "b2e08fc9d277cd79811e87105861ba61b07ab20d1fbaf9c0be91fddd1f68bb4b",
+    "submoduleLockPath": "build/rusty-v8-submodules.lock",
+    "submoduleLockSha256": "a2e79ba15ab1f59e5701ca8ca9eb4d7a5bd613d6b4f421f5220fc2977499d9dd"
+  },
+  "rustyV8BuildInputs": {
+    "androidPlatform": {
+      "repository": "https://chromium.googlesource.com/chromium/src/third_party/android_platform.git",
+      "commit": "e3919359f2387399042d31401817db4a02d756ec"
+    },
+    "catapult": {
+      "repository": "https://chromium.googlesource.com/catapult.git",
+      "commit": "5a34891efa6e41c8aca8842386b8ee528963ffdf"
+    },
+    "gn": {
+      "cipdPackage": "gn/gn/linux-amd64",
+      "cipdInstance": "Hsz5PJ5YuLJ3tmkyqxJOIbGBkdBloNZRSbLnUi205fAC",
+      "archiveSize": 3458216,
+      "archiveSha256": "1eccf93c9e58b8b277b66932ab124e21b18191d065a0d65149b2e7522db4e5f0",
+      "binarySha256": "9a45b0aabd427540f2cc05f3d81ac964873fa4ba618698751c1db48f8d09b524"
+    },
+    "ninja": {
+      "cipdPackage": "infra/3pp/tools/ninja/linux-amd64",
+      "cipdInstance": "Px8cwPaaG8_fZ_tsK8dBmx3YEruNDnmvqb-oo1U7UIIC",
+      "archiveSize": 182403,
+      "archiveSha256": "3f1f1cc0f69a1bcfdf67fb6c2bc7419b1dd812bb8d0e79afa9bfa8a3553b5082",
+      "binarySha256": "09f0e5a8a2cf762b24b4d3ed464ffb2529e650d2efc36bab31da36aa93791efc"
+    },
+    "chromiumRustToolchain": {
+      "url": "https://storage.googleapis.com/chromium-browser-clang/Linux_x64/rust-toolchain-4c4205163abcbd08948b3efab796c543ba1ea687-2-llvmorg-23-init-10931-g20b6ec66.tar.xz",
+      "size": 274625900,
+      "sha256": "a96863c5b811af23cbe3f20fcfc82939e637be2bd79f05a117f1762c3bb35fe5"
+    },
+    "hostSysroot": {
+      "url": "https://commondatastorage.googleapis.com/chrome-linux-sysroot/52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d",
+      "size": 19727236,
+      "sha256": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d"
+    }
+  },
+  "releaseGate": {
+    "downstreamCommit": null,
+    "downstreamCargoLockSha256": null,
+    "blockedUntilFrozen": true
+  }
+}

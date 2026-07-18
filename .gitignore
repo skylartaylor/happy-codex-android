@@ -15,6 +15,16 @@ build/
 out/
 storybook-static/
 
+# Versioned Android build policy; other root build output remains ignored.
+!/build/
+/build/*
+!/build/inputs.lock.json
+!/build/rusty-v8-submodules.lock
+!/build/android-target.env
+!/build/Dockerfile.builder
+!/build/fetch-inputs.sh
+!/build/build-rusty-v8.sh
+
 # ignore README for publishing
 codex-cli/README.md
 
