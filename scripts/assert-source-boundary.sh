@@ -58,6 +58,7 @@ allowed_policy = {
     "build/Dockerfile.builder",
     "build/fetch-inputs.sh",
     "build/inputs.lock.json",
+    "build/prepare-rusty-v8-binding.sh",
     "build/rusty-v8-submodules.lock",
     "scripts/assert-build-inputs.sh",
     "scripts/assert-managed-updates-disabled.sh",

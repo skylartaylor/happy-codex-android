@@ -25,6 +25,7 @@ storybook-static/
 !/build/fetch-inputs.sh
 !/build/build-rusty-v8.sh
 !/build/build-codex-android.sh
+!/build/prepare-rusty-v8-binding.sh
 
 # ignore README for publishing
 codex-cli/README.md

@@ -21,6 +21,7 @@ readonly V8_BINDING_NAME='src_binding_release_aarch64-linux-android.rs'
 readonly V8_ARCHIVE_EXPECTED_SHA256='aff3c75ff060e77319d93fc34483a0947b4bc2ad9d8597b9f9c44444857b91de'
 readonly V8_ARCHIVE_GZIP_EXPECTED_SHA256='b396d07e5a390a264ac3a696d94b3ea465c9d19b4c60088b27c73aaf268457f0'
 readonly V8_BINDING_EXPECTED_SHA256='cded03dd9deb0c84ec46f7d2f38da837e9ca551dacb8abb4ea8bd07fc312b7f9'
+readonly V8_PREPARED_BINDING_SHA256='c03bb6bd234eda46b5591d9411825c8cedfe603f8e58c4bea49fe756b97396bb'
 readonly CARGO_FETCH_MARKER='.codex-cargo-fetch-complete'
 readonly PACKAGE_ROOT_NAME="happy-codex-android-aarch64-v${CODEX_VERSION}"
 readonly ARCHIVE_NAME="${PACKAGE_ROOT_NAME}.tar.gz"
@@ -209,6 +210,15 @@ expected = {
             "sha256": "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf",
         },
     },
+    "rustyV8BindingPatch": {
+        "state": "required_android_bindgen_aliases",
+        "sourceSha256": "cded03dd9deb0c84ec46f7d2f38da837e9ca551dacb8abb4ea8bd07fc312b7f9",
+        "preparedSha256": "c03bb6bd234eda46b5591d9411825c8cedfe603f8e58c4bea49fe756b97396bb",
+        "aliases": [
+            "v8_String_WriteFlags_kNullTerminate",
+            "v8_String_WriteFlags_kReplaceInvalidUtf8",
+        ],
+    },
     "v8Commit": "5d0e31ea6bf67f4559faa759b91e22bc3f1cd696",
     "v8Version": "149.2.0",
     "artifactId": "happy-codex-android-aarch64-v0.144.4",
@@ -228,6 +238,7 @@ actual = {
     "binary": lock.get("codexBuild", {}).get("binary"),
     "marker": lock.get("codexBuild", {}).get("cargoHomeCompletionMarker"),
     "cargoFetch": lock.get("codexBuild", {}).get("cargoFetch"),
+    "rustyV8BindingPatch": lock.get("codexBuild", {}).get("rustyV8BindingPatch"),
     "v8Commit": lock.get("rustyV8", {}).get("commit"),
     "v8Version": lock.get("rustyV8", {}).get("crateVersion"),
     "artifactId": lock.get("codexBuild", {}).get("package", {}).get("artifactId"),
@@ -375,6 +386,9 @@ readonly V8_BINDING_SHA256="${V8_HASHES[3]}"
   && "$V8_ARCHIVE_GZIP_SHA256" == "$V8_ARCHIVE_GZIP_EXPECTED_SHA256" \
   && "$V8_BINDING_SHA256" == "$V8_BINDING_EXPECTED_SHA256" ]] \
   || fail 'rusty_v8 artifacts differ from the frozen output hashes'
+readonly V8_PREPARED_BINDING="$SCRATCH_DIR/$V8_BINDING_NAME"
+"$SCRIPT_DIR/prepare-rusty-v8-binding.sh" \
+  "$V8_ROOT/$V8_BINDING_NAME" "$V8_PREPARED_BINDING"
 [[ "$(file_size "$V8_ROOT/$V8_BINDING_NAME")" -gt 1024 ]] \
   || fail 'rusty_v8 binding file is unexpectedly small'
 archive_member_count=0
@@ -411,7 +425,7 @@ export OPENSSL_NO_PKG_CONFIG=1
 export PATH="$NDK_BIN:/opt/rust/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export PKG_CONFIG_ALLOW_CROSS=1
 export RUSTY_V8_ARCHIVE="$V8_ROOT/$V8_ARCHIVE_GZIP_NAME"
-export RUSTY_V8_SRC_BINDING_PATH="$V8_ROOT/$V8_BINDING_NAME"
+export RUSTY_V8_SRC_BINDING_PATH="$V8_PREPARED_BINDING"
 export TMPDIR="$BUILD_TMP"
 export ZERO_AR_DATE=1
 
@@ -476,7 +490,8 @@ build_id="$($READELF --notes --wide "$PACKAGE_DIR/bin/codex" \
 [[ "$build_id" =~ ^[0-9a-f]{40}$ ]] || fail 'packaged Codex CLI has no SHA-1 ELF build ID'
 
 python3 - "$PACKAGE_DIR" "$V8_MANIFEST_SHA256" "$V8_ARCHIVE_SHA256" \
-  "$V8_ARCHIVE_GZIP_SHA256" "$V8_BINDING_SHA256" "$build_id" \
+  "$V8_ARCHIVE_GZIP_SHA256" "$V8_BINDING_SHA256" \
+  "$V8_PREPARED_BINDING_SHA256" "$build_id" \
   "${NEEDED_LIBRARIES[@]}" <<'PY'
 import hashlib
 import json
@@ -486,8 +501,8 @@ import sys
 from pathlib import Path
 
 package_dir = Path(sys.argv[1])
-v8_manifest, v8_archive, v8_archive_gzip, v8_binding, build_id = sys.argv[2:7]
-needed = sys.argv[7:]
+v8_manifest, v8_archive, v8_archive_gzip, v8_binding, v8_prepared_binding, build_id = sys.argv[2:8]
+needed = sys.argv[8:]
 
 
 def file_record(path: Path) -> dict[str, object]:
@@ -535,6 +550,7 @@ manifest = {
             "archiveSha256": v8_archive,
             "archiveGzipSha256": v8_archive_gzip,
             "bindingSha256": v8_binding,
+            "preparedBindingSha256": v8_prepared_binding,
         },
     },
     "elf": {

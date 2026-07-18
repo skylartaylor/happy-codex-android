@@ -20,6 +20,7 @@ documents = {
         "build/fetch-inputs.sh",
         "build/build-rusty-v8.sh",
         "build/build-codex-android.sh",
+        "build/prepare-rusty-v8-binding.sh",
     )
 }
 
@@ -169,6 +170,7 @@ codex_build = "build/build-codex-android.sh"
 codex = lock["codexBuild"]
 release_gate = lock["releaseGate"]
 fetch_contract = codex["cargoFetch"]
+binding_patch = codex["rustyV8BindingPatch"]
 require(
     codex_build,
     release_gate["downstreamCommit"],
@@ -189,6 +191,11 @@ require(
     fetch_contract["offlineVerificationPackage"],
     *fetch_contract["offlineVerificationTargets"],
     *fetch_contract["regressionCrate"].values(),
+    binding_patch["state"],
+    *binding_patch["aliases"],
+    binding_patch["sourceSha256"],
+    binding_patch["preparedSha256"],
+    "prepare-rusty-v8-binding.sh",
     *v8["outputSha256"].values(),
     *codex["rustyV8Artifacts"].values(),
     *codex["elf"]["neededAllowlist"],
@@ -197,7 +204,14 @@ require(
 require(
     docker,
     "build-codex-android.sh",
+    "prepare-rusty-v8-binding.sh",
     "ANDROID_INPUTS_LOCK",
+)
+require(
+    "build/prepare-rusty-v8-binding.sh",
+    *binding_patch["aliases"],
+    binding_patch["sourceSha256"],
+    binding_patch["preparedSha256"],
 )
 require(
     fetch,

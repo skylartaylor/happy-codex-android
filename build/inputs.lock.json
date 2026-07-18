@@ -156,6 +156,15 @@
         "sha256": "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf"
       }
     },
+    "rustyV8BindingPatch": {
+      "state": "required_android_bindgen_aliases",
+      "sourceSha256": "cded03dd9deb0c84ec46f7d2f38da837e9ca551dacb8abb4ea8bd07fc312b7f9",
+      "preparedSha256": "c03bb6bd234eda46b5591d9411825c8cedfe603f8e58c4bea49fe756b97396bb",
+      "aliases": [
+        "v8_String_WriteFlags_kNullTerminate",
+        "v8_String_WriteFlags_kReplaceInvalidUtf8"
+      ]
+    },
     "rustyV8Artifacts": {
       "archive": "librusty_v8_release_aarch64-linux-android.a",
       "compressedArchive": "librusty_v8_release_aarch64-linux-android.a.gz",

@@ -53,6 +53,7 @@ jobs:
           bash -n build/fetch-inputs.sh
           bash -n build/build-rusty-v8.sh
           bash -n build/build-codex-android.sh
+          bash -n build/prepare-rusty-v8-binding.sh
           bash scripts/assert-build-inputs.sh
           bash scripts/assert-upstream-base.sh
           bash scripts/assert-source-boundary.sh
@@ -99,6 +100,7 @@ jobs:
             build/fetch-inputs.sh \
             build/build-rusty-v8.sh \
             build/build-codex-android.sh \
+            build/prepare-rusty-v8-binding.sh \
             "${context}/build/"
           docker build \
             --pull \
@@ -343,6 +345,7 @@ jobs:
             build/fetch-inputs.sh \
             build/build-rusty-v8.sh \
             build/build-codex-android.sh \
+            build/prepare-rusty-v8-binding.sh \
             "${context}/build/"
           docker build \
             --pull \
