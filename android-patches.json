@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "tag": "rust-v0.144.4",
+    "tagObject": "632c07017ed17f00ca6d911b754683dee785af69",
+    "commit": "8c68d4c87dc54d38861f5114e920c3de2efa5876"
+  },
+  "downstream": {
+    "branch": "happy/android-v0.144.4",
+    "commit": null,
+    "state": "working_tree_not_frozen"
+  },
+  "excludedForkChanges": [
+    "provider or feedback endpoint redirects",
+    "model instruction fallbacks",
+    "hook behavior changes",
+    "multi-agent feature changes",
+    "npm packaging or self-update channels",
+    "fail-open correctness locks"
+  ],
+  "patches": [
+    {
+      "id": "android-bionic-target",
+      "purpose": "Define the API-29 Bionic target and Android-only native dependencies without changing desktop targets.",
+      "paths": [
+        "codex-rs/.cargo/config.toml",
+        "codex-rs/Cargo.lock",
+        "codex-rs/core/Cargo.toml"
+      ],
+      "requiredEvidence": [
+        "cargo build --locked --frozen for aarch64-linux-android",
+        "ELF target and DT_NEEDED allowlist inspection"
+      ]
+    },
+    {
+      "id": "happy-managed-updates",
+      "purpose": "Compile Android startup checks, updater execution, update prompts, and mutable announcements out of the Happy-managed artifact.",
+      "paths": [
+        "codex-rs/app-server-daemon/src/lib.rs",
+        "codex-rs/app-server-daemon/src/update_loop_android.rs",
+        "codex-rs/cli/src/doctor.rs",
+        "codex-rs/cli/src/doctor/updates_android.rs",
+        "codex-rs/cli/src/main.rs",
+        "codex-rs/tui/src/lib.rs",
+        "codex-rs/tui/src/tooltips.rs",
+        "codex-rs/tui/src/update_action.rs",
+        "codex-rs/tui/src/updates_android.rs"
+      ],
+      "requiredEvidence": [
+        "Android-target behavior tests reject codex update",
+        "Android-target behavior tests expose no startup update action",
+        "network trace contains no updater or announcement request"
+      ]
+    },
+    {
+      "id": "canonical-self-executable",
+      "purpose": "Keep subprocess and arg0 re-exec paths bound to the canonical packaged ELF rather than a relocatable shell wrapper.",
+      "paths": [
+        "codex-rs/arg0/src/lib.rs"
+      ],
+      "requiredEvidence": [
+        "apply_patch alias succeeds on Android",
+        "applypatch alias succeeds on Android",
+        "codex-execve-wrapper alias succeeds on Android"
+      ]
+    },
+    {
+      "id": "android-remote-mcp-tls",
+      "purpose": "Use the Android certificate-root contract for remote MCP without changing non-Android authentication behavior.",
+      "paths": [
+        "codex-rs/rmcp-client/Cargo.toml",
+        "codex-rs/rmcp-client/src/auth_status.rs",
+        "codex-rs/rmcp-client/src/utils.rs"
+      ],
+      "requiredEvidence": [
+        "cold-start HTTPS MCP probe reaches a protocol response",
+        "provider and MCP credentials remain private"
+      ]
+    },
+    {
+      "id": "android-openpty",
+      "purpose": "Provide the Bionic openpty compatibility implementation required for command streaming and interruption.",
+      "paths": [
+        "codex-rs/utils/pty/src/android_openpty.rs",
+        "codex-rs/utils/pty/src/lib.rs"
+      ],
+      "requiredEvidence": [
+        "PTY stdin and stdout stream on Android",
+        "PTY resize, interrupt, termination, and cleanup pass"
+      ]
+    }
+  ]
+}

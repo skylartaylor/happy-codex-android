@@ -1,0 +1,88 @@
+name: Android source boundary
+
+on:
+  push:
+    branches:
+      - happy/android-v0.144.4
+    paths:
+      - android-patches.json
+      - build/**
+      - codex-rs/**
+      - scripts/assert-*.sh
+      - .github/workflows/source-checks.yml
+  pull_request:
+    paths:
+      - android-patches.json
+      - build/**
+      - codex-rs/**
+      - scripts/assert-*.sh
+      - .github/workflows/source-checks.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-source-boundary-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate policy documents and shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool android-patches.json >/dev/null
+          python3 -m json.tool build/inputs.lock.json >/dev/null
+          bash -n build/android-target.env
+          bash -n build/fetch-inputs.sh
+          bash -n build/build-rusty-v8.sh
+          bash -n scripts/assert-build-inputs.sh
+          bash -n scripts/assert-upstream-base.sh
+          bash -n scripts/assert-source-boundary.sh
+          bash -n scripts/assert-managed-updates-disabled.sh
+
+      - name: Verify locked rusty_v8 submodules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          lock = json.loads(Path("build/inputs.lock.json").read_text())
+          path = Path(lock["rustyV8"]["submoduleLockPath"])
+          actual = hashlib.sha256(path.read_bytes()).hexdigest()
+          expected = lock["rustyV8"]["submoduleLockSha256"]
+          if actual != expected:
+              raise SystemExit(f"rusty_v8 submodule lock mismatch: {actual} != {expected}")
+
+          lines = [line for line in path.read_text().splitlines() if line]
+          if len(lines) != 20 or lines != sorted(lines):
+              raise SystemExit("rusty_v8 submodule lock must contain 20 sorted gitlinks")
+          PY
+
+      - name: Verify frozen build inputs
+        shell: bash
+        run: bash scripts/assert-build-inputs.sh
+
+      - name: Verify frozen upstream and reviewed source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/assert-upstream-base.sh
+          bash scripts/assert-source-boundary.sh
+
+      - name: Verify Happy-managed Android update boundary
+        shell: bash
+        run: bash scripts/assert-managed-updates-disabled.sh
