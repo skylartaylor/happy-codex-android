@@ -78,10 +78,12 @@ package_root="$(sed -n '1s#/.*##p' "$members")"
   || fail 'artifact archive has an unexpected package root'
 grep -Fx "$package_root/bin/codex" "$members" >/dev/null \
   || fail 'artifact archive does not contain bin/codex'
-grep -Fx "$package_root/bin/libc++_shared.so" "$members" >/dev/null \
-  || fail 'artifact archive does not contain the pinned libc++ runtime'
 grep -Fx "$package_root/SHA256SUMS" "$members" >/dev/null \
   || fail 'artifact archive does not contain SHA256SUMS'
+has_libcxx=false
+if grep -Fx "$package_root/bin/libc++_shared.so" "$members" >/dev/null; then
+  has_libcxx=true
+fi
 
 tar -xzf "$archive" -C "$scratch"
 package_dir="$scratch/$package_root"
@@ -108,14 +110,21 @@ cert_file="$prefix/etc/tls/cert.pem"
   "run-as com.termux /system/bin/sh -c 'umask 077; /system/bin/cat > \"$remote_codex\"'" \
   < "$package_dir/bin/codex"
 "${adb_cmd[@]}" shell \
-  "run-as com.termux /system/bin/sh -c 'umask 077; /system/bin/cat > \"$remote_libcxx\"'" \
-  < "$package_dir/bin/libc++_shared.so"
-"${adb_cmd[@]}" shell \
-  "run-as com.termux /system/bin/chmod 700 \"$remote_codex\" \"$remote_libcxx\""
+  "run-as com.termux /system/bin/chmod 700 \"$remote_codex\""
 
-for mapping in \
-  "$package_dir/bin/codex:$remote_codex" \
-  "$package_dir/bin/libc++_shared.so:$remote_libcxx"; do
+if [[ "$has_libcxx" == true ]]; then
+  "${adb_cmd[@]}" shell \
+    "run-as com.termux /system/bin/sh -c 'umask 077; /system/bin/cat > \"$remote_libcxx\"'" \
+    < "$package_dir/bin/libc++_shared.so"
+  "${adb_cmd[@]}" shell \
+    "run-as com.termux /system/bin/chmod 700 \"$remote_libcxx\""
+fi
+
+mappings=("$package_dir/bin/codex:$remote_codex")
+if [[ "$has_libcxx" == true ]]; then
+  mappings+=("$package_dir/bin/libc++_shared.so:$remote_libcxx")
+fi
+for mapping in "${mappings[@]}"; do
   local_path="${mapping%%:*}"
   remote_path="${mapping#*:}"
   expected="$(host_sha256 "$local_path")"

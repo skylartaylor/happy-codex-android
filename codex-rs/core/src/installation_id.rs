@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Read;
 use std::io::Result;
@@ -16,6 +17,38 @@ use uuid::Uuid;
 
 pub(crate) const INSTALLATION_ID_FILENAME: &str = "installation_id";
 
+#[cfg(target_os = "android")]
+static INSTALLATION_ID_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(target_os = "android")]
+fn lock_installation_id_file(file: &File) -> Result<()> {
+    use std::os::fd::AsRawFd;
+
+    // `std::fs::File::lock` is unsupported on Android. POSIX record locks are
+    // available and preserve the required cross-process serialization.
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = libc::F_WRLCK as _;
+    lock.l_whence = libc::SEEK_SET as _;
+
+    loop {
+        // SAFETY: `file` owns a valid descriptor, and `lock` remains valid for
+        // the duration of the blocking `fcntl` call.
+        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETLKW, &lock) } == 0 {
+            return Ok(());
+        }
+
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn lock_installation_id_file(file: &File) -> Result<()> {
+    file.lock()
+}
+
 pub async fn resolve_installation_id(codex_home: &AbsolutePathBuf) -> Result<String> {
     let path = codex_home.join(INSTALLATION_ID_FILENAME);
     fs::create_dir_all(codex_home).await?;
@@ -28,8 +61,17 @@ pub async fn resolve_installation_id(codex_home: &AbsolutePathBuf) -> Result<Str
             options.mode(0o644);
         }
 
+        // POSIX record locks are process-associated, so Android also needs a
+        // mutex to serialize callers within this process. Declaring the guard
+        // before `file` ensures the descriptor (and its record lock) is
+        // released first.
+        #[cfg(target_os = "android")]
+        let _process_guard = INSTALLATION_ID_LOCK
+            .lock()
+            .map_err(|_| std::io::Error::other("installation ID lock poisoned"))?;
+
         let mut file = options.open(&path)?;
-        file.lock()?;
+        lock_installation_id_file(&file)?;
 
         #[cfg(unix)]
         {
@@ -68,6 +110,7 @@ mod tests {
     use super::INSTALLATION_ID_FILENAME;
     use super::resolve_installation_id;
     use core_test_support::PathExt;
+    use futures::future::join_all;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
     use uuid::Uuid;
@@ -144,6 +187,25 @@ mod tests {
             std::fs::read_to_string(codex_home.path().join(INSTALLATION_ID_FILENAME))
                 .expect("read rewritten installation id"),
             resolved
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_installation_id_serializes_concurrent_writers() {
+        let codex_home = TempDir::new().expect("create temp dir");
+        let codex_home_abs = codex_home.path().abs();
+
+        let resolved = join_all((0..16).map(|_| resolve_installation_id(&codex_home_abs)))
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .expect("resolve concurrent installation ids");
+
+        assert!(resolved.iter().all(|id| id == &resolved[0]));
+        assert_eq!(
+            std::fs::read_to_string(codex_home.path().join(INSTALLATION_ID_FILENAME))
+                .expect("read persisted installation id"),
+            resolved[0]
         );
     }
 }
