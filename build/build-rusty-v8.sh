@@ -288,7 +288,7 @@ export PKG_CONFIG_ALLOW_CROSS=1
 export SOURCE_DATE_EPOCH="$RUSTY_V8_SOURCE_DATE_EPOCH"
 export ZERO_AR_DATE=1
 export NUM_JOBS="${JOBS:-$(nproc)}"
-export RUSTFLAGS="-Cremap-path-prefix=${RUSTY_V8_SOURCE}=/usr/src/rusty_v8"
+export RUSTFLAGS="--remap-path-prefix=${RUSTY_V8_SOURCE}=/usr/src/rusty_v8"
 export PATH="$NDK_BIN:$PATH"
 
 cargo build \

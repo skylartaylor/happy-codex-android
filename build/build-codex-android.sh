@@ -378,7 +378,7 @@ export CARGO_HOME="$CARGO_HOME_PATH"
 export CARGO_INCREMENTAL=0
 export CARGO_NET_OFFLINE=true
 export CARGO_TARGET_DIR="$TARGET_DIR"
-export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-Cremap-path-prefix=${REPOSITORY_ROOT}=/usr/src/codex -Clink-arg=-lc++_shared -Clink-arg=${BUILTINS_ARCHIVE} -Clink-arg=-Wl,--build-id=sha1"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="--remap-path-prefix=${REPOSITORY_ROOT}=/usr/src/codex -Clink-arg=-lc++_shared -Clink-arg=${BUILTINS_ARCHIVE} -Clink-arg=-Wl,--build-id=sha1"
 export GIT_CONFIG_GLOBAL=/dev/null
 export GIT_CONFIG_NOSYSTEM=1
 export HOME="$BUILD_HOME"
