@@ -4,7 +4,7 @@ set -euo pipefail
 IFS=$'\n\t'
 umask 022
 
-readonly SOURCE_COMMIT='ab9c3ec845b913c2a9adf23a60c4d04f65c647b1'
+readonly SOURCE_COMMIT='aca2b297c18655edc5a42c331f68bec7b446f09a'
 readonly CARGO_LOCK_SHA256='221542fd6c8d48fec346a6684cadc7bcbc110fa2a0f7f2e574b22523e0ef5f75'
 readonly RUST_TOOLCHAIN_SHA256='570656042681cfd8795403a455baf9a33035331a07db0645e866bbcea89a3d64'
 readonly TARGET_ENV_SHA256='1524456f7a6daab6e433248056dc136730a608d2e7f3079405927d636d0e15d3'
@@ -191,7 +191,7 @@ lock = json.loads(Path(sys.argv[1]).read_text())
 expected = {
     "schemaVersion": 1,
     "state": "initial_android_candidate_inputs_frozen",
-    "sourceCommit": "ab9c3ec845b913c2a9adf23a60c4d04f65c647b1",
+    "sourceCommit": "aca2b297c18655edc5a42c331f68bec7b446f09a",
     "cargoLockSha256": "221542fd6c8d48fec346a6684cadc7bcbc110fa2a0f7f2e574b22523e0ef5f75",
     "target": "aarch64-linux-android",
     "apiLevel": 29,
@@ -536,7 +536,7 @@ manifest = {
         "repository": "https://github.com/openai/codex",
         "upstreamTag": "rust-v0.144.4",
         "upstreamCommit": "8c68d4c87dc54d38861f5114e920c3de2efa5876",
-        "downstreamCommit": "ab9c3ec845b913c2a9adf23a60c4d04f65c647b1",
+        "downstreamCommit": "aca2b297c18655edc5a42c331f68bec7b446f09a",
         "cargoLockSha256": "221542fd6c8d48fec346a6684cadc7bcbc110fa2a0f7f2e574b22523e0ef5f75",
     },
     "build": {

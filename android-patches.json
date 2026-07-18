@@ -7,7 +7,7 @@
   },
   "downstream": {
     "branch": "happy/android-v0.144.4",
-    "commit": "ab9c3ec845b913c2a9adf23a60c4d04f65c647b1",
+    "commit": "aca2b297c18655edc5a42c331f68bec7b446f09a",
     "state": "source_commit_frozen"
   },
   "excludedForkChanges": [
@@ -62,6 +62,17 @@
         "apply_patch alias succeeds on Android",
         "applypatch alias succeeds on Android",
         "codex-execve-wrapper alias succeeds on Android"
+      ]
+    },
+    {
+      "id": "android-installation-id-lock",
+      "purpose": "Use Bionic-compatible installation ID locking while preserving serialization within and across Android processes.",
+      "paths": [
+        "codex-rs/core/src/installation_id.rs"
+      ],
+      "requiredEvidence": [
+        "concurrent installation ID resolvers persist one UUID",
+        "app-server initializes on Android from an empty Codex home"
       ]
     },
     {
