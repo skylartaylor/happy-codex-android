@@ -47,6 +47,7 @@ if any(not path.startswith("codex-rs/") for path in paths):
 
 allowed_source = set(paths)
 allowed_policy = {
+    ".github/dependabot.yaml",
     ".gitignore",
     ".github/workflows/android-artifact.yml",
     ".github/workflows/source-checks.yml",
