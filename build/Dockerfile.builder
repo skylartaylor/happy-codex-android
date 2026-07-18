@@ -10,7 +10,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/rust/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Freeze apt to one signed Ubuntu archive snapshot. The image digest and this
-# timestamp together keep the host package set from moving between builds.
+# timestamp together keep the host package set from moving between builds. The
+# minimal base has the Ubuntu archive signing key but no CA bundle, so bootstrap
+# only ca-certificates without TLS peer verification. APT still verifies the
+# signed InRelease metadata and package hashes; every later download uses normal
+# TLS verification.
 RUN printf '%s\n' \
       'Types: deb' \
       'URIs: https://snapshot.ubuntu.com/ubuntu/20260715T000000Z' \
@@ -18,11 +22,13 @@ RUN printf '%s\n' \
       'Components: main universe' \
       'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
       > /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get -o Acquire::https::Verify-Peer=false update \
+    && apt-get -o Acquire::https::Verify-Peer=false install \
+      --yes --no-install-recommends ca-certificates \
     && apt-get update \
     && apt-get install --yes --no-install-recommends \
       bash \
       build-essential \
-      ca-certificates \
       cmake \
       coreutils \
       curl \
