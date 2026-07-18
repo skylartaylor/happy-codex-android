@@ -176,7 +176,7 @@ readonly DOWNLOAD_DIR="$INPUT_ROOT/downloads"
 readonly RUSTY_V8_SOURCE="$INPUT_ROOT/src/rusty_v8"
 readonly NDK_HOME="$INPUT_ROOT/android-ndk-r28c"
 readonly GN="$INPUT_ROOT/tools/gn/gn"
-readonly NINJA="$INPUT_ROOT/tools/ninja/ninja"
+readonly NINJA_BINARY="$INPUT_ROOT/tools/ninja/ninja"
 readonly CHROMIUM_RUST_TOOLCHAIN="$RUSTY_V8_SOURCE/third_party/rust-toolchain"
 readonly CHROMIUM_CLANG_TOOLCHAIN="$INPUT_ROOT/tools/chromium-clang"
 readonly SYSROOT_DIR="$INPUT_ROOT/sysroots/debian_bullseye_amd64-sysroot"
@@ -221,7 +221,7 @@ verify_file "$DOWNLOAD_DIR/debian-bullseye-amd64-sysroot.tar.xz" \
   "$SYSROOT_SHA256" "$SYSROOT_SIZE" 'Chromium amd64 sysroot'
 printf '%s  %s\n' "$GN_BINARY_SHA256" "$GN" | sha256sum --check --strict - >/dev/null \
   || fail 'GN binary failed verification'
-printf '%s  %s\n' "$NINJA_BINARY_SHA256" "$NINJA" | sha256sum --check --strict - >/dev/null \
+printf '%s  %s\n' "$NINJA_BINARY_SHA256" "$NINJA_BINARY" | sha256sum --check --strict - >/dev/null \
   || fail 'Ninja binary failed verification'
 grep --fixed-strings --line-regexp 'Pkg.Revision = 28.2.13676358' "$NDK_HOME/source.properties" >/dev/null \
   || fail 'extracted NDK has an unexpected revision'
@@ -266,6 +266,18 @@ readonly BUILTINS_ARCHIVE="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/lib/c
   && -f "$BUILTINS_ARCHIVE" ]] \
   || fail 'NDK compiler, libclang, or compiler-rt builtins archive is missing'
 
+# The outer rusty_v8 bindgen invocation needs Android target flags. Chromium's
+# nested host-side bindgen actions already receive complete GN-generated flags,
+# so prevent the outer override from leaking across the Ninja process boundary.
+readonly NINJA_WRAPPER="$TARGET_DIR/ninja-with-clean-bindgen-env"
+mkdir -p "$TARGET_DIR"
+{
+  printf '#!/usr/bin/env bash\n'
+  printf 'unset BINDGEN_EXTRA_CLANG_ARGS\n'
+  printf 'exec %q "$@"\n' "$NINJA_BINARY"
+} > "$NINJA_WRAPPER"
+chmod 0755 "$NINJA_WRAPPER"
+
 export ANDROID_NDK_HOME="$NDK_HOME"
 export ANDROID_NDK_ROOT="$NDK_HOME"
 export AR_aarch64_linux_android="$NDK_BIN/llvm-ar"
@@ -276,7 +288,7 @@ export CLANG_BASE_PATH="$CHROMIUM_CLANG_TOOLCHAIN"
 export LIBCLANG_PATH="$NDK_LIB"
 export BINDGEN_EXTRA_CLANG_ARGS="--target=aarch64-linux-android --sysroot=${NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
 export GN
-export NINJA
+export NINJA="$NINJA_WRAPPER"
 export V8_FROM_SOURCE=1
 export CARGO_NET_OFFLINE=true
 export CARGO_HOME="$CARGO_CACHE_DIR"
