@@ -121,6 +121,36 @@
       "sha256": "52d61d4446ffebfaa3dda2cd02da4ab4876ff237853f46d273e7f9b666652e1d"
     }
   },
+  "codexBuild": {
+    "version": "0.144.4",
+    "cargoPackage": "codex-cli",
+    "binary": "codex",
+    "cargoHomeCompletionMarker": ".codex-cargo-fetch-complete",
+    "rustyV8Artifacts": {
+      "archive": "librusty_v8_release_aarch64-linux-android.a",
+      "compressedArchive": "librusty_v8_release_aarch64-linux-android.a.gz",
+      "binding": "src_binding_release_aarch64-linux-android.rs",
+      "checksums": "rusty-v8-artifacts.sha256"
+    },
+    "elf": {
+      "class": "ELF64",
+      "machine": "AArch64",
+      "interpreter": "/system/bin/linker64",
+      "neededAllowlist": [
+        "libc.so",
+        "libc++_shared.so",
+        "libdl.so",
+        "liblog.so",
+        "libm.so"
+      ]
+    },
+    "package": {
+      "artifactId": "happy-codex-android-aarch64-v0.144.4",
+      "archiveRoot": "happy-codex-android-aarch64-v0.144.4",
+      "archiveFilename": "happy-codex-android-aarch64-v0.144.4.tar.gz",
+      "promotionStatus": "unapproved_poc"
+    }
+  },
   "releaseGate": {
     "downstreamCommit": "ab9c3ec845b913c2a9adf23a60c4d04f65c647b1",
     "downstreamCargoLockSha256": "221542fd6c8d48fec346a6684cadc7bcbc110fa2a0f7f2e574b22523e0ef5f75",

@@ -49,7 +49,7 @@ fail() {
 }
 
 usage() {
-  printf 'usage: %s INPUT_ROOT\n' "${0##*/}" >&2
+  printf 'usage: %s INPUT_ROOT CODEX_SOURCE_ROOT\n' "${0##*/}" >&2
   exit 2
 }
 
@@ -215,7 +215,7 @@ verify_submodule_lock() {
   rm -rf "$scratch_dir"
 }
 
-[[ $# -eq 1 ]] || usage
+[[ $# -eq 2 ]] || usage
 [[ "$(uname -s)" == 'Linux' && "$(uname -m)" == 'x86_64' ]] \
   || fail 'inputs must be fetched on Linux x86_64'
 
@@ -229,8 +229,11 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SCRIPT_DIR
 readonly SUBMODULE_LOCK_PATH="${RUSTY_V8_SUBMODULE_LOCK:-$SCRIPT_DIR/rusty-v8-submodules.lock}"
+readonly INPUTS_LOCK_PATH="${ANDROID_INPUTS_LOCK:-$SCRIPT_DIR/inputs.lock.json}"
 [[ -f "$SUBMODULE_LOCK_PATH" && ! -L "$SUBMODULE_LOCK_PATH" ]] \
   || fail 'rusty_v8 submodule lock is unavailable'
+[[ -f "$INPUTS_LOCK_PATH" && ! -L "$INPUTS_LOCK_PATH" ]] \
+  || fail 'Android input manifest is unavailable'
 printf '%s  %s\n' "$SUBMODULE_LOCK_SHA256" "$SUBMODULE_LOCK_PATH" \
   | sha256sum --check --strict - >/dev/null \
   || fail 'rusty_v8 submodule lock failed SHA-256 verification'
@@ -239,6 +242,38 @@ printf '%s  %s\n' "$SUBMODULE_LOCK_SHA256" "$SUBMODULE_LOCK_PATH" \
 
 INPUT_ROOT="$(canonical_directory "$1")"
 readonly INPUT_ROOT
+CODEX_SOURCE_ROOT="$(cd "$2" && pwd -P)"
+readonly CODEX_SOURCE_ROOT
+[[ -d "$CODEX_SOURCE_ROOT/.git" || -f "$CODEX_SOURCE_ROOT/.git" ]] \
+  || fail 'Codex source root is not a Git checkout'
+
+frozen_codex="$(python3 - "$INPUTS_LOCK_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+lock = json.loads(Path(sys.argv[1]).read_text())
+gate = lock["releaseGate"]
+if gate.get("blockedUntilFrozen") is not False:
+    raise SystemExit("downstream source gate is not frozen")
+print(f'{gate["downstreamCommit"]}\t{gate["downstreamCargoLockSha256"]}')
+PY
+)"
+IFS=$'\t' read -r CODEX_SOURCE_COMMIT CODEX_CARGO_LOCK_SHA256 <<<"$frozen_codex"
+readonly CODEX_SOURCE_COMMIT CODEX_CARGO_LOCK_SHA256
+git -c "safe.directory=$CODEX_SOURCE_ROOT" -C "$CODEX_SOURCE_ROOT" \
+  merge-base --is-ancestor "$CODEX_SOURCE_COMMIT" HEAD \
+  || fail 'Codex checkout does not contain the frozen Android source commit'
+git -c "safe.directory=$CODEX_SOURCE_ROOT" -C "$CODEX_SOURCE_ROOT" \
+  diff --quiet "$CODEX_SOURCE_COMMIT" -- codex-rs \
+  || fail 'Codex Rust source differs from the frozen Android source commit'
+[[ -z "$(git -c "safe.directory=$CODEX_SOURCE_ROOT" -C "$CODEX_SOURCE_ROOT" \
+  status --porcelain --untracked-files=all -- codex-rs)" ]] \
+  || fail 'Codex Rust source worktree is dirty'
+printf '%s  %s\n' "$CODEX_CARGO_LOCK_SHA256" "$CODEX_SOURCE_ROOT/codex-rs/Cargo.lock" \
+  | sha256sum --check --strict - >/dev/null \
+  || fail 'Codex Cargo.lock failed frozen release-gate verification'
+
 DOWNLOAD_DIR="$(canonical_directory "$INPUT_ROOT/downloads")"
 readonly DOWNLOAD_DIR
 SOURCE_ROOT="$(canonical_directory "$INPUT_ROOT/src")"
@@ -246,6 +281,9 @@ readonly SOURCE_ROOT
 TOOL_ROOT="$(canonical_directory "$INPUT_ROOT/tools")"
 readonly TOOL_ROOT
 readonly RUSTY_V8_SOURCE="$SOURCE_ROOT/rusty_v8"
+readonly CARGO_CACHE_DIR="$INPUT_ROOT/cargo-home"
+mkdir -p "$CARGO_CACHE_DIR"
+export CARGO_HOME="$CARGO_CACHE_DIR"
 
 [[ ! -e "$INPUT_ROOT/.complete" ]] || fail 'input root is already finalized'
 
@@ -324,6 +362,15 @@ printf '%s' "$SYSROOT_URL" > "$SYSROOT_DIR/.stamp"
 
 cargo fetch --manifest-path "$RUSTY_V8_SOURCE/Cargo.toml" \
   --locked --target aarch64-linux-android
+cargo fetch --manifest-path "$CODEX_SOURCE_ROOT/codex-rs/Cargo.toml" \
+  --locked --target aarch64-linux-android
+cat > "$CARGO_CACHE_DIR/.codex-cargo-fetch-complete" <<EOF
+schema_version=1
+source_commit=${CODEX_SOURCE_COMMIT}
+cargo_lock_sha256=${CODEX_CARGO_LOCK_SHA256}
+target=aarch64-linux-android
+cargo_version=1.95.0
+EOF
 
 cat > "$INPUT_ROOT/inputs.lock" <<EOF
 rusty_v8_commit=${RUSTY_V8_COMMIT}
@@ -336,6 +383,8 @@ ninja_cipd_instance=${NINJA_INSTANCE}
 ninja_archive_sha256=${NINJA_ARCHIVE_SHA256}
 chromium_rust_toolchain_sha256=${CHROMIUM_RUST_TOOLCHAIN_SHA256}
 sysroot_sha256=${SYSROOT_SHA256}
+codex_source_commit=${CODEX_SOURCE_COMMIT}
+codex_cargo_lock_sha256=${CODEX_CARGO_LOCK_SHA256}
 EOF
 (cd "$INPUT_ROOT" && sha256sum inputs.lock > inputs.lock.sha256)
 touch "$INPUT_ROOT/.complete"

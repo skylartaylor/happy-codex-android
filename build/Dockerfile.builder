@@ -92,16 +92,19 @@ RUN set -eu; \
 
 COPY build/fetch-inputs.sh /usr/local/bin/fetch-android-build-inputs
 COPY build/build-rusty-v8.sh /usr/local/bin/build-rusty-v8-android
+COPY build/build-codex-android.sh /usr/local/bin/build-codex-android
 COPY build/android-target.env /usr/local/share/codex-android/android-target.env
 COPY build/inputs.lock.json /usr/local/share/codex-android/inputs.lock.json
 COPY build/rusty-v8-submodules.lock /usr/local/share/codex-android/rusty-v8-submodules.lock
 
 ENV ANDROID_TARGET_ENV=/usr/local/share/codex-android/android-target.env \
+    ANDROID_INPUTS_LOCK=/usr/local/share/codex-android/inputs.lock.json \
     RUSTY_V8_SUBMODULE_LOCK=/usr/local/share/codex-android/rusty-v8-submodules.lock
 
 RUN chmod 0755 \
       /usr/local/bin/fetch-android-build-inputs \
-      /usr/local/bin/build-rusty-v8-android
+      /usr/local/bin/build-rusty-v8-android \
+      /usr/local/bin/build-codex-android
 
 WORKDIR /work
 CMD ["/bin/bash"]

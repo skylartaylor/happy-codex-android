@@ -177,8 +177,13 @@ readonly NINJA="$INPUT_ROOT/tools/ninja/ninja"
 readonly CHROMIUM_RUST_TOOLCHAIN="$RUSTY_V8_SOURCE/third_party/rust-toolchain"
 readonly SYSROOT_DIR="$INPUT_ROOT/sysroots/debian_bullseye_amd64-sysroot"
 readonly TARGET_DIR="$INPUT_ROOT/target"
+readonly CARGO_CACHE_DIR="$INPUT_ROOT/cargo-home"
 
 [[ -f "$INPUT_ROOT/.complete" ]] || fail 'input root was not finalized by fetch-inputs.sh'
+[[ -d "$CARGO_CACHE_DIR/registry" && -d "$CARGO_CACHE_DIR/git" ]] \
+  || fail 'persistent Cargo input cache is incomplete'
+[[ -f "$CARGO_CACHE_DIR/.codex-cargo-fetch-complete" ]] \
+  || fail 'Codex Cargo input marker is missing'
 (cd "$INPUT_ROOT" && sha256sum --check --strict inputs.lock.sha256 >/dev/null) \
   || fail 'input lock checksum is invalid'
 [[ "$(git -C "$RUSTY_V8_SOURCE" rev-parse HEAD)" == "$RUSTY_V8_COMMIT" ]] \
@@ -257,6 +262,7 @@ export GN
 export NINJA
 export V8_FROM_SOURCE=1
 export CARGO_NET_OFFLINE=true
+export CARGO_HOME="$CARGO_CACHE_DIR"
 export CARGO_INCREMENTAL=0
 export CARGO_TARGET_DIR="$TARGET_DIR"
 export LIBLZMA_NO_PKG_CONFIG=1
