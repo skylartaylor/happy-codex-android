@@ -18,6 +18,9 @@ readonly EXPECTED_SOURCE_DATE_EPOCH='1784002837'
 readonly V8_ARCHIVE_NAME='librusty_v8_release_aarch64-linux-android.a'
 readonly V8_ARCHIVE_GZIP_NAME="${V8_ARCHIVE_NAME}.gz"
 readonly V8_BINDING_NAME='src_binding_release_aarch64-linux-android.rs'
+readonly V8_ARCHIVE_EXPECTED_SHA256='aff3c75ff060e77319d93fc34483a0947b4bc2ad9d8597b9f9c44444857b91de'
+readonly V8_ARCHIVE_GZIP_EXPECTED_SHA256='b396d07e5a390a264ac3a696d94b3ea465c9d19b4c60088b27c73aaf268457f0'
+readonly V8_BINDING_EXPECTED_SHA256='cded03dd9deb0c84ec46f7d2f38da837e9ca551dacb8abb4ea8bd07fc312b7f9'
 readonly CARGO_FETCH_MARKER='.codex-cargo-fetch-complete'
 readonly PACKAGE_ROOT_NAME="happy-codex-android-aarch64-v${CODEX_VERSION}"
 readonly ARCHIVE_NAME="${PACKAGE_ROOT_NAME}.tar.gz"
@@ -195,6 +198,17 @@ expected = {
     "package": "codex-cli",
     "binary": "codex",
     "marker": ".codex-cargo-fetch-complete",
+    "cargoFetch": {
+        "markerSchemaVersion": 2,
+        "scope": "all_locked_targets",
+        "offlineVerificationPackage": "codex-cli",
+        "offlineVerificationTargets": ["all", "aarch64-linux-android"],
+        "regressionCrate": {
+            "name": "arboard",
+            "version": "3.6.1",
+            "sha256": "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf",
+        },
+    },
     "v8Commit": "5d0e31ea6bf67f4559faa759b91e22bc3f1cd696",
     "v8Version": "149.2.0",
     "artifactId": "happy-codex-android-aarch64-v0.144.4",
@@ -213,6 +227,7 @@ actual = {
     "package": lock.get("codexBuild", {}).get("cargoPackage"),
     "binary": lock.get("codexBuild", {}).get("binary"),
     "marker": lock.get("codexBuild", {}).get("cargoHomeCompletionMarker"),
+    "cargoFetch": lock.get("codexBuild", {}).get("cargoFetch"),
     "v8Commit": lock.get("rustyV8", {}).get("commit"),
     "v8Version": lock.get("rustyV8", {}).get("crateVersion"),
     "artifactId": lock.get("codexBuild", {}).get("package", {}).get("artifactId"),
@@ -257,11 +272,15 @@ set +a
 [[ -f "$CARGO_MARKER_PATH" && ! -L "$CARGO_MARKER_PATH" ]] \
   || fail 'Codex Cargo fetch completion marker is missing'
 cat > "$SCRATCH_DIR/expected-cargo-marker" <<EOF
-schema_version=1
+schema_version=2
 source_commit=${SOURCE_COMMIT}
 cargo_lock_sha256=${CARGO_LOCK_SHA256}
 target=${TARGET}
 cargo_version=1.95.0
+fetch_scope=all_locked_targets
+verified_package=codex-cli
+verified_targets=all,${TARGET}
+regression_crate=arboard@3.6.1
 EOF
 cmp --silent "$SCRATCH_DIR/expected-cargo-marker" "$CARGO_MARKER_PATH" \
   || fail 'Codex Cargo fetch completion marker does not match the frozen source'
@@ -352,6 +371,10 @@ readonly V8_MANIFEST_SHA256="${V8_HASHES[0]}"
 readonly V8_ARCHIVE_SHA256="${V8_HASHES[1]}"
 readonly V8_ARCHIVE_GZIP_SHA256="${V8_HASHES[2]}"
 readonly V8_BINDING_SHA256="${V8_HASHES[3]}"
+[[ "$V8_ARCHIVE_SHA256" == "$V8_ARCHIVE_EXPECTED_SHA256" \
+  && "$V8_ARCHIVE_GZIP_SHA256" == "$V8_ARCHIVE_GZIP_EXPECTED_SHA256" \
+  && "$V8_BINDING_SHA256" == "$V8_BINDING_EXPECTED_SHA256" ]] \
+  || fail 'rusty_v8 artifacts differ from the frozen output hashes'
 [[ "$(file_size "$V8_ROOT/$V8_BINDING_NAME")" -gt 1024 ]] \
   || fail 'rusty_v8 binding file is unexpectedly small'
 archive_member_count=0

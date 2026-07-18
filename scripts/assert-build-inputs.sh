@@ -15,6 +15,7 @@ lock = json.loads(Path("build/inputs.lock.json").read_text())
 documents = {
     name: Path(name).read_text()
     for name in (
+        ".github/workflows/android-artifact.yml",
         "build/Dockerfile.builder",
         "build/fetch-inputs.sh",
         "build/build-rusty-v8.sh",
@@ -143,6 +144,7 @@ require(
     v8["cargoLockSha256"],
     v8["cargoTomlSha256"],
     v8["submoduleLockSha256"],
+    *v8["outputSha256"].values(),
     android["targetEnvironment"]["sha256"],
     build_inputs["androidPlatform"]["commit"],
     build_inputs["catapult"]["commit"],
@@ -166,6 +168,7 @@ require(
 codex_build = "build/build-codex-android.sh"
 codex = lock["codexBuild"]
 release_gate = lock["releaseGate"]
+fetch_contract = codex["cargoFetch"]
 require(
     codex_build,
     release_gate["downstreamCommit"],
@@ -181,6 +184,12 @@ require(
     codex["cargoPackage"],
     codex["binary"],
     codex["cargoHomeCompletionMarker"],
+    fetch_contract["markerSchemaVersion"],
+    fetch_contract["scope"],
+    fetch_contract["offlineVerificationPackage"],
+    *fetch_contract["offlineVerificationTargets"],
+    *fetch_contract["regressionCrate"].values(),
+    *v8["outputSha256"].values(),
     *codex["rustyV8Artifacts"].values(),
     *codex["elf"]["neededAllowlist"],
     *codex["package"].values(),
@@ -195,7 +204,36 @@ require(
     "downstreamCommit",
     "downstreamCargoLockSha256",
     codex["cargoHomeCompletionMarker"],
+    fetch_contract["markerSchemaVersion"],
+    fetch_contract["scope"],
+    fetch_contract["offlineVerificationPackage"],
+    *fetch_contract["offlineVerificationTargets"],
+    *fetch_contract["regressionCrate"].values(),
 )
+
+codex_fetch = "cargo fetch --manifest-path \"$CODEX_SOURCE_ROOT/codex-rs/Cargo.toml\" --locked"
+if codex_fetch not in documents[fetch]:
+    raise SystemExit("Codex Cargo fetch must cover every target in the frozen lock graph")
+if f"{codex_fetch} --target" in documents[fetch]:
+    raise SystemExit("Codex Cargo fetch must not be restricted to one target")
+for target in fetch_contract["offlineVerificationTargets"]:
+    require(fetch, f"--target {target}")
+
+workflow = ".github/workflows/android-artifact.yml"
+require(
+    workflow,
+    "reuse_rusty_v8_run_id",
+    "reuse_rusty_v8_source_sha",
+    "github-token: ${{ github.token }}",
+    "repository: ${{ github.repository }}",
+    "run-id: ${{ inputs.reuse_rusty_v8_run_id }}",
+    "run.get(\"head_sha\")",
+    "lock[\"rustyV8\"][\"outputSha256\"]",
+    "Verify Codex Cargo cache without network access",
+    "--network none",
+)
+for target in fetch_contract["offlineVerificationTargets"]:
+    require(workflow, f"--target {target}")
 
 print("PASS: build scripts match the frozen Android input manifest")
 PY

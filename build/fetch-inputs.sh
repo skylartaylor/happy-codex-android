@@ -228,7 +228,7 @@ verify_submodule_lock() {
 [[ "$(uname -s)" == 'Linux' && "$(uname -m)" == 'x86_64' ]] \
   || fail 'inputs must be fetched on Linux x86_64'
 
-for command_name in awk cargo curl cut diff git gzip python3 rustc sha1sum sha256sum sort tar unzip wc xz; do
+for command_name in awk cargo curl cut diff find git gzip python3 rustc sha1sum sha256sum sort tar unzip wc xz; do
   require_command "$command_name"
 done
 [[ "$(rustc --version)" == "$RUSTC_VERSION" ]] || fail 'rustc version does not match the frozen builder'
@@ -396,14 +396,35 @@ printf '%s' "$SYSROOT_URL" > "$SYSROOT_DIR/.stamp"
 
 cargo fetch --manifest-path "$RUSTY_V8_SOURCE/Cargo.toml" \
   --locked --target aarch64-linux-android
-cargo fetch --manifest-path "$CODEX_SOURCE_ROOT/codex-rs/Cargo.toml" \
-  --locked --target aarch64-linux-android
+cargo fetch --manifest-path "$CODEX_SOURCE_ROOT/codex-rs/Cargo.toml" --locked
+CARGO_NET_OFFLINE=true cargo tree \
+  --manifest-path "$CODEX_SOURCE_ROOT/codex-rs/Cargo.toml" \
+  --package codex-cli \
+  --target all \
+  --locked --frozen --offline >/dev/null
+CARGO_NET_OFFLINE=true cargo tree \
+  --manifest-path "$CODEX_SOURCE_ROOT/codex-rs/Cargo.toml" \
+  --package codex-cli \
+  --target aarch64-linux-android \
+  --locked --frozen --offline >/dev/null
+arboard_crate="$(find "$CARGO_CACHE_DIR/registry/cache" -type f \
+  -name arboard-3.6.1.crate -print)"
+[[ -n "$arboard_crate" && "$arboard_crate" != *$'\n'* ]] \
+  || fail 'frozen Cargo cache does not contain exactly one arboard 3.6.1 crate archive'
+printf '%s  %s\n' \
+  '0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf' \
+  "$arboard_crate" | sha256sum --check --strict - >/dev/null \
+  || fail 'arboard 3.6.1 crate archive failed frozen Cargo.lock verification'
 cat > "$CARGO_CACHE_DIR/.codex-cargo-fetch-complete" <<EOF
-schema_version=1
+schema_version=2
 source_commit=${CODEX_SOURCE_COMMIT}
 cargo_lock_sha256=${CODEX_CARGO_LOCK_SHA256}
 target=aarch64-linux-android
 cargo_version=1.95.0
+fetch_scope=all_locked_targets
+verified_package=codex-cli
+verified_targets=all,aarch64-linux-android
+regression_crate=arboard@3.6.1
 EOF
 
 cat > "$INPUT_ROOT/inputs.lock" <<EOF

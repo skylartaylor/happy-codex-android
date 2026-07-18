@@ -4,6 +4,15 @@ run-name: Android artifact from ${{ github.ref_name }} at ${{ github.sha }}
 
 on:
   workflow_dispatch:
+    inputs:
+      reuse_rusty_v8_run_id:
+        description: Prior run ID containing a verified rusty_v8 artifact
+        required: false
+        type: string
+      reuse_rusty_v8_source_sha:
+        description: Exact source SHA used by the prior run
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -29,8 +38,15 @@ jobs:
 
       - name: Validate pipeline syntax and frozen inputs
         shell: bash
+        env:
+          REUSE_RUN_ID: ${{ inputs.reuse_rusty_v8_run_id }}
+          REUSE_SOURCE_SHA: ${{ inputs.reuse_rusty_v8_source_sha }}
         run: |
           set -euo pipefail
+          if [[ -n "$REUSE_RUN_ID" || -n "$REUSE_SOURCE_SHA" ]]; then
+            [[ "$REUSE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+            [[ "$REUSE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          fi
           python3 -m json.tool android-patches.json >/dev/null
           python3 -m json.tool build/inputs.lock.json >/dev/null
           bash -n build/android-target.env
@@ -45,6 +61,9 @@ jobs:
   build-rusty-v8:
     name: Build pinned rusty_v8
     needs: validate-source
+    permissions:
+      actions: read
+      contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -55,6 +74,7 @@ jobs:
           persist-credentials: false
 
       - name: Reclaim runner disk
+        if: ${{ inputs.reuse_rusty_v8_run_id == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -63,6 +83,7 @@ jobs:
           df -h /
 
       - name: Build pinned builder image
+        if: ${{ inputs.reuse_rusty_v8_run_id == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -88,6 +109,7 @@ jobs:
             "${context}"
 
       - name: Fetch and verify frozen inputs
+        if: ${{ inputs.reuse_rusty_v8_run_id == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -101,6 +123,7 @@ jobs:
             /workspace/build/fetch-inputs.sh /work/inputs /workspace
 
       - name: Build rusty_v8 without network access
+        if: ${{ inputs.reuse_rusty_v8_run_id == '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -114,6 +137,67 @@ jobs:
             "${BUILDER_IMAGE}" \
             /workspace/build/build-rusty-v8.sh /work/inputs /work/v8
 
+      - name: Validate prior rusty_v8 run provenance
+        if: ${{ inputs.reuse_rusty_v8_run_id != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_RUN_ID: ${{ inputs.reuse_rusty_v8_run_id }}
+          REUSE_SOURCE_SHA: ${{ inputs.reuse_rusty_v8_source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REUSE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$REUSE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git cat-file -e "${REUSE_SOURCE_SHA}^{commit}"
+
+          metadata="${RUNNER_TEMP}/reuse-rusty-v8-run.json"
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --output "$metadata" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${REUSE_RUN_ID}"
+          python3 - "$metadata" "$REUSE_RUN_ID" "$REUSE_SOURCE_SHA" \
+            "$GITHUB_REPOSITORY" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          run = json.loads(Path(sys.argv[1]).read_text())
+          expected_run_id = int(sys.argv[2])
+          expected_sha = sys.argv[3]
+          expected_repository = sys.argv[4]
+          expected = {
+              "id": expected_run_id,
+              "head_sha": expected_sha,
+              "event": "workflow_dispatch",
+              "path": ".github/workflows/android-artifact.yml",
+              "status": "completed",
+              "repository": expected_repository,
+          }
+          actual = {
+              "id": run.get("id"),
+              "head_sha": run.get("head_sha"),
+              "event": run.get("event"),
+              "path": run.get("path"),
+              "status": run.get("status"),
+              "repository": run.get("head_repository", {}).get("full_name"),
+          }
+          if actual != expected:
+              raise SystemExit(f"prior rusty_v8 run provenance mismatch: {actual!r}")
+          PY
+
+      - name: Reuse prior rusty_v8 artifacts
+        if: ${{ inputs.reuse_rusty_v8_run_id != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: happy-codex-rusty-v8-${{ inputs.reuse_rusty_v8_source_sha }}
+          path: ${{ runner.temp }}/android-v8
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.reuse_rusty_v8_run_id }}
+
       - name: Verify relocatable rusty_v8 artifact set
         shell: bash
         run: |
@@ -123,6 +207,49 @@ jobs:
           relocated="${RUNNER_TEMP}/rusty-v8-artifacts-relocated.sha256"
           expected="${RUNNER_TEMP}/rusty-v8-artifacts-expected"
           actual="${RUNNER_TEMP}/rusty-v8-artifacts-actual"
+
+          if [[ ! -f "${v8_dir}/librusty_v8_release_aarch64-linux-android.a" ]]; then
+            gzip --decompress --keep \
+              "${v8_dir}/librusty_v8_release_aarch64-linux-android.a.gz"
+          fi
+
+          python3 - "$v8_dir" build/inputs.lock.json <<'PY'
+          import hashlib
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          root = Path(sys.argv[1])
+          lock = json.loads(Path(sys.argv[2]).read_text())
+          names = {
+              "archive": "librusty_v8_release_aarch64-linux-android.a",
+              "compressedArchive": "librusty_v8_release_aarch64-linux-android.a.gz",
+              "binding": "src_binding_release_aarch64-linux-android.rs",
+          }
+          expected = lock["rustyV8"]["outputSha256"]
+          actual = {}
+          for key, name in names.items():
+              path = root / name
+              if not path.is_file() or path.is_symlink():
+                  raise SystemExit(f"missing rusty_v8 output: {name}")
+              actual[key] = hashlib.sha256(path.read_bytes()).hexdigest()
+          if actual != expected:
+              raise SystemExit(f"rusty_v8 output hashes differ from frozen inputs: {actual!r}")
+
+          declared = {}
+          for line in (root / "rusty-v8-artifacts.sha256").read_text().splitlines():
+              match = re.fullmatch(r"([0-9a-f]{64})  ([^\0]+)", line)
+              if not match:
+                  raise SystemExit(f"invalid rusty_v8 checksum row: {line!r}")
+              name = Path(match.group(2)).name
+              if name in declared:
+                  raise SystemExit(f"duplicate rusty_v8 checksum row: {name}")
+              declared[name] = match.group(1)
+          expected_declared = {names[key]: digest for key, digest in expected.items()}
+          if declared != expected_declared:
+              raise SystemExit("rusty_v8 checksum manifest differs from frozen outputs")
+          PY
 
           awk '
             NF != 2 || length($1) != 64 || $1 ~ /[^0-9a-f]/ { exit 1 }
@@ -237,6 +364,30 @@ jobs:
             --env FETCH_JOBS=8 \
             "${BUILDER_IMAGE}" \
             /workspace/build/fetch-inputs.sh /work/inputs /workspace
+
+      - name: Verify Codex Cargo cache without network access
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --network none \
+            --mount "type=bind,src=${GITHUB_WORKSPACE},dst=/workspace,readonly" \
+            --mount "type=bind,src=${RUNNER_TEMP}/android-inputs,dst=/work/inputs,readonly" \
+            --env CARGO_HOME=/work/inputs/cargo-home \
+            --env CARGO_NET_OFFLINE=true \
+            "${BUILDER_IMAGE}" \
+            /bin/bash -euo pipefail -c '
+              cargo tree \
+                --manifest-path /workspace/codex-rs/Cargo.toml \
+                --package codex-cli \
+                --target all \
+                --locked --frozen --offline >/dev/null
+              cargo tree \
+                --manifest-path /workspace/codex-rs/Cargo.toml \
+                --package codex-cli \
+                --target aarch64-linux-android \
+                --locked --frozen --offline >/dev/null
+            '
 
       - name: Build Codex without network access
         shell: bash

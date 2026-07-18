@@ -33,6 +33,9 @@ readonly CARGO_VERSION='cargo 1.95.0 (f2d3ce0bd 2026-03-21)'
 readonly RUSTY_V8_SOURCE_DATE_EPOCH='1779728126'
 readonly RUSTY_V8_CARGO_LOCK_SHA256='ae9a372644c9f04bc33c11c121ec7a7fcf510e7f8173246621f621850c5735ae'
 readonly RUSTY_V8_CARGO_TOML_SHA256='b2e08fc9d277cd79811e87105861ba61b07ab20d1fbaf9c0be91fddd1f68bb4b'
+readonly V8_ARCHIVE_EXPECTED_SHA256='aff3c75ff060e77319d93fc34483a0947b4bc2ad9d8597b9f9c44444857b91de'
+readonly V8_ARCHIVE_GZIP_EXPECTED_SHA256='b396d07e5a390a264ac3a696d94b3ea465c9d19b4c60088b27c73aaf268457f0'
+readonly V8_BINDING_EXPECTED_SHA256='cded03dd9deb0c84ec46f7d2f38da837e9ca551dacb8abb4ea8bd07fc312b7f9'
 
 fail() {
   printf 'error: %s\n' "$*" >&2
@@ -337,6 +340,18 @@ install -m 0644 "$binding" \
   "$OUTPUT_ROOT/src_binding_release_aarch64-linux-android.rs"
 gzip --no-name --keep --force \
   "$OUTPUT_ROOT/librusty_v8_release_aarch64-linux-android.a"
+printf '%s  %s\n' "$V8_ARCHIVE_EXPECTED_SHA256" \
+  "$OUTPUT_ROOT/librusty_v8_release_aarch64-linux-android.a" \
+  | sha256sum --check --strict - >/dev/null \
+  || fail 'librusty_v8.a differs from the frozen output hash'
+printf '%s  %s\n' "$V8_ARCHIVE_GZIP_EXPECTED_SHA256" \
+  "$OUTPUT_ROOT/librusty_v8_release_aarch64-linux-android.a.gz" \
+  | sha256sum --check --strict - >/dev/null \
+  || fail 'compressed librusty_v8.a differs from the frozen output hash'
+printf '%s  %s\n' "$V8_BINDING_EXPECTED_SHA256" \
+  "$OUTPUT_ROOT/src_binding_release_aarch64-linux-android.rs" \
+  | sha256sum --check --strict - >/dev/null \
+  || fail 'rusty_v8 binding differs from the frozen output hash'
 sha256sum \
   "$OUTPUT_ROOT/librusty_v8_release_aarch64-linux-android.a" \
   "$OUTPUT_ROOT/librusty_v8_release_aarch64-linux-android.a.gz" \
